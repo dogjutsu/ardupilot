@@ -116,7 +116,9 @@ See [ardupilot_passthrough.md](ardupilot_passthrough.md) for detailed workflow.
 | PWM3 | PC8 | TIM3_CH3 | PWM/DShot/BIDIR | Motor 3 |
 | PWM4 | PC9 | TIM3_CH4 | PWM/DShot | Motor 4 |
 
-**Bidirectional DShot** enabled on outputs 1 & 3 for ESC telemetry.
+| PWM5 | PD12 | TIM4_CH1 | PWM/DShot/BIDIR | Weapon ESC (beeper repurposed) |
+
+**Bidirectional DShot** available on all outputs; enable via `SERVO_BLH_BDMASK` (e.g., `21` for 1,3,5).
 
 ## Lua Scripting
 
@@ -208,7 +210,7 @@ python3 Tools/reboot_to_dfu_bf.py
 
 ### Misc
 - **LED strip:** PA10 (NeoPixel/WS2812, TIM1_CH3)
-- **Beeper:** PD12 (TIM4_CH1, inverted)
+- **PWM5:** PD12 (TIM4_CH1) beeper repurposed to PWM output
 - **GPIO:** PE2 (user output)
 
 ## Known Issues & Workarounds

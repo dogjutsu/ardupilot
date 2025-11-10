@@ -56,9 +56,10 @@ Complete reference for configuring and using ArduPilot Rover on the HDZero Halo 
 | Output | Pin | Timer | BIDIR Support |
 |--------|-----|-------|---------------|
 | PWM1 | PC6 | TIM3_CH1 | ✅ Yes |
-| PWM2 | PC7 | TIM3_CH2 | ❌ No |
+| PWM2 | PC7 | TIM3_CH2 | ✅ Yes |
 | PWM3 | PC8 | TIM3_CH3 | ✅ Yes |
-| PWM4 | PC9 | TIM3_CH4 | ❌ No |
+| PWM4 | PC9 | TIM3_CH4 | ✅ Yes |
+| PWM5 | PD12 | TIM4_CH1 | ✅ Yes (beeper repurposed) |
 
 #### I2C / Sensors
 - **I2C1:** PB8 (SCL), PB9 (SDA) - External compass
@@ -68,7 +69,7 @@ Complete reference for configuring and using ArduPilot Rover on the HDZero Halo 
 
 #### Misc
 - **LED Strip:** PA10 (NeoPixel/WS2812)
-- **Beeper:** PD12 (inverted)
+- **PWM5:** PD12 (TIM4_CH1) beeper repurposed to PWM output
 - **GPIO:** PE2 (user output)
 
 ---
@@ -239,7 +240,7 @@ MOT_PWM_TYPE = 4             # DShot600 (or 5 for DShot1200)
 SERVO_BLH_BDMASK = 5         # Binary 0101 = enable on outputs 1 & 3
 ```
 
-**Available on outputs 1 & 3 only** (TIM3 hardware limitation).
+**Bidirectional DShot:** All declared PWM outputs (PWM1..PWM5) can be enabled selectively via `SERVO_BLH_BDMASK`. Example: `5` (outputs 1 & 3), `21` (1,3,5).
 
 ### Standard PWM Configuration
 
@@ -258,9 +259,9 @@ SERVO1_TRIM = 1500           # Neutral
 Pre-configured for receiving telemetry packets from ESC.
 
 #### Via Bidirectional DShot
-Enable on supported outputs (1 & 3):
+Enable on selected outputs (e.g. 1,3,5):
 ```
-SERVO_BLH_BDMASK = 5         # Outputs 1 & 3
+SERVO_BLH_BDMASK = 21        # 21 = binary 10101 (outputs 1,3,5)
 SERVO_BLH_TRATE = 10         # 10Hz telemetry rate
 ```
 
@@ -510,12 +511,12 @@ ATC_STR_RAT_I = 0.1
 
 #### Brushless Weapon Motor
 
-Connect to PWM output (e.g., PWM3):
+Connect to PWM output (e.g., PWM5 weapon ESC):
 
 ```
-SERVO3_FUNCTION = 0          # Disabled (manual control via Lua)
-SERVO3_MIN = 1000
-SERVO3_MAX = 2000
+SERVO5_FUNCTION = 0          # Disabled (manual/Lua control)
+SERVO5_MIN = 1000
+SERVO5_MAX = 2000
 ```
 
 Control via:
@@ -527,12 +528,12 @@ Control via:
 
 Via ESC telemetry (bidirectional DShot):
 ```
-SERVO_BLH_BDMASK = 4         # Enable on output 3
+SERVO_BLH_BDMASK = 16        # Enable on output 5 only
 ```
 
 Access in Lua:
 ```lua
-local rpm = esc_telem:get_rpm(2)  -- 0-indexed, output 3 = index 2
+local rpm = esc_telem:get_rpm(4)  -- 0-indexed, output 5 = index 4
 ```
 
 ### Impact Detection
@@ -835,7 +836,8 @@ SERIAL PORTS
 
 MOTOR OUTPUTS
   PWM1-4: PC6, PC7, PC8, PC9 (TIM3)
-  BIDIR:  Outputs 1 & 3 only
+  PWM5:   PD12 (TIM4) weapon ESC (beeper repurposed)
+  BIDIR:  Enable selectively via SERVO_BLH_BDMASK (e.g. 21 = 1,3,5)
 
 FLIGHT MODES (CH12)
   Manual → Acro → Hold

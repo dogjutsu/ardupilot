@@ -29,14 +29,28 @@ Summary of differences (with justification)
   - Reason: Ensures serial peripherals in ArduPilot align with physical pins used
     by Betaflight for the Halo. Defaults set for Rover use: SERIAL1=RCIN (ELRS), SERIAL2=MAVLink, SERIAL4=ESC Telemetry. SERIAL3/SERIAL5 disabled.
 
-- PWM outputs: map MOTOR1..4 to PC6..PC9 using TIM3 CH1..CH4.  
-  - Reason: Betaflight uses PC6..PC9 for motors; using TIM3 matches many H7 hwdefs.
+- PWM outputs: map MOTOR1..4 to PC6..PC9 using TIM3 CH1..CH4; repurpose beeper PD12 (TIM4_CH1) as PWM5.  
+  - Reason: Betaflight uses PC6..PC9 for motors; using TIM3 matches many H7 hwdefs. PD12 provides an additional PWM-capable output for weapon ESCs on combat robots.
 
 - Bootloader flashing disabled by default (`AP_BOOTLOADER_FLASHING_ENABLED 0`).  
   - Reason: This repo does not include an HDZERO_HALO bootloader binary, and
     the chibios hwdef scripts will error if `AP_BOOTLOADER_FLASHING_ENABLED` is
     enabled without a bootloader file. Use `Tools/scripts/build_bootloaders.py`
     to produce a bootloader if you want to enable flashing.
+
+PWM/Outputs Mapping
+
+| Output | Pin | Timer/Channel | Notes |
+|-------:|-----|----------------|-------|
+| PWM1 | PC6 | TIM3_CH1 | Motor/ESC |
+| PWM2 | PC7 | TIM3_CH2 | Motor/ESC |
+| PWM3 | PC8 | TIM3_CH3 | Motor/ESC |
+| PWM4 | PC9 | TIM3_CH4 | Motor/ESC |
+| PWM5 | PD12 | TIM4_CH1 | Repurposed from beeper; use for weapon ESC |
+
+Notes:
+- All outputs support PWM and DShot; BiDir DShot available via SERVO_BLH_BDMASK.
+- Beeper is removed by default; add a beeper only if you remap it to another pin.
 
 How to test
 
@@ -58,6 +72,7 @@ Files updated
 
 - `hwdef.dat` — the new HDZERO_HALO hardware definition derived from TMotorH743.
 - `README.md` — this file with the rationale and testing steps.
+  - Updated to include PWM5 on PD12 (beeper repurposed).
 
 References
 

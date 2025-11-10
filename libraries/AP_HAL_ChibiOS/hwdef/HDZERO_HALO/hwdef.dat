@@ -210,22 +210,19 @@ PC6 TIM3_CH1 TIM3 PWM(1) BIDIR
 PC7 TIM3_CH2 TIM3 PWM(2) BIDIR
 PC8 TIM3_CH3 TIM3 PWM(3) BIDIR
 PC9 TIM3_CH4 TIM3 PWM(4) BIDIR
+## Repurpose beeper (PD12 TIM4_CH1) as a 5th PWM-capable output for weapon ESC
+PD12 TIM4_CH1 TIM4 PWM(5) BIDIR
 
 # Justification: Betaflight's mapping uses PC6..PC9 for motor outputs. TIM3 CH1..4
 # chosen to match timer/pin pairing on H743 and common ArduPilot hwdefs.
+# PD12/TIM4_CH1 previously used for beeper is repurposed to PWM(5) for an extra
+# motor/ESC output (e.g. weapon). If audible beeper is required, remap it.
 # [TODO: REVIEW] Confirm PWM frequency/timings are suitable for target ESCs and
-# that TIM3 isn't used elsewhere (conflict check).
+# that TIM3/TIM4 aren't conflicting with other peripherals.
 
 ## Beeper and LEDs (match Betaflight pin names)
-TONE_ALARM_PIN PD12
-TONE_ALARM_TIMER TIM4
-TONE_ALARM_CHANNEL 1
-TONE_ALARM_INVERT
-
-# Justification: PD12/TIM4 chosen because many H7 boards use TIM4 for tone alarms
-# and Betaflight references PD12 for buzzer/tones. Invert set per typical active-low
-# buzzer wiring on flight controller boards.
-# [TODO: REVIEW] Validate buzzer polarity on the Halo PCB.
+# Beeper removed: PD12 repurposed as PWM(5). Add a beeper back only if needed by
+# mapping an alternate pin and timer.
 
 NEOPIXEL_PIN PA10
 NEOPIXEL_TIMER TIM1
@@ -273,8 +270,8 @@ IMU Invensensev3 SPI:imu2_icm42688 ROTATION_PITCH_180_YAW_90
 # [TODO: REVIEW] Verify the orientation matrix against an actual board photo/schematic.
 
 ## DMA preferences - copied from TMotor baseline and adjusted for H7
-DMA_NOSHARE TIM5_UP TIM3_UP TIM8_UP SPI1* SPI4*
-DMA_PRIORITY TIM5_UP TIM3_UP TIM8_UP SPI1* SPI4*
+DMA_NOSHARE TIM5_UP TIM3_UP TIM4_UP TIM8_UP SPI1* SPI4*
+DMA_PRIORITY TIM5_UP TIM3_UP TIM4_UP TIM8_UP SPI1* SPI4*
 
 # Allow auto DMA resolver to pick streams; don't force ADC1 stream here.
 
