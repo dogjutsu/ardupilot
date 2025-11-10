@@ -1,0 +1,15 @@
+# Common defaults for STM32H7-series used by H7-based hwdefs.
+# This file provides minimal entries required by chibios_hwdef/ldscript
+# generation when external flash or instruction RAM mappings are present.
+
+# INSTRUCTION_RAM: base address (hex) of aliasable instruction RAM region used
+# by some hwdef ldscript code paths that map external flash or execute-in-place.
+# The exact value may vary by MCU package; this default is conservative for
+# STM32H743 devices and can be overridden in board-specific hwdefs if needed.
+INSTRUCTION_RAM 0x20000000
+
+# Justification: Provide a sane default so boards that add EXT_FLASH_SIZE_MB
+# can exercise the ldscript generation path without causing UnboundLocalError.
+# [TODO: REVIEW] Confirm INSTRUCTION_RAM for specific MCU/package variants and
+# adjust for exact memory map when board-specific data is available.
+
