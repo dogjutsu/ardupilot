@@ -1,0 +1,329 @@
+# HDZero Halo hwdef - derived from TMotorH743 hwdef with per-difference justification
+#
+# Strategy:
+# - Start from the TMotorH743 hwdef (same MCU family) and adapt only where Betaflight's
+#   HDZERO_HALO config or the Halo hardware differs. Each modified line below contains
+#   a comment explaining the change and the Betaflight reference where applicable.
+
+# MCU class and specific type - same as TMotor H7 (both use STM32H743)
+MCU STM32H7xx STM32H743xx
+MCU_VOLTAGE 3.3
+MCU_CLOCKRATE_MHZ 480
+
+# Justification: STM32H743xx chosen because HDZero Halo hardware uses an H7-series
+# MCU (Betaflight's HDZERO_HALO targets H743 parts). MCU_VOLTAGE and MCU_CLOCKRATE
+# values mirror other H743 hwdefs in ArduPilot and the TMotorH743 baseline.
+# [TODO: REVIEW] Confirm exact MCU variant/package used on all Halo SKUs (e.g. ZIT6 vs IIK6).
+
+# External crystal frequency (Hz) - Betaflight's HDZERO_HALO uses 8MHz
+OSCILLATOR_HZ 8000000
+
+# Justification: Betaflight config.h sets HSE_VALUE/OSC to 8MHz for HDZERO_HALO.
+# This value affects PLL and system clock derivation in board startup code and
+# must match the actual crystal on the board.
+# [TODO: REVIEW] Validate with a physical board or vendor datasheet if available.
+
+# Internal flash size for H743 parts (2MB)
+FLASH_SIZE_KB 2048
+FLASH_RESERVE_START_KB 384
+define HAL_STORAGE_SIZE 16384
+define STORAGE_FLASH_PAGE 1
+
+# Board identification - use a descriptive APJ_BOARD_TYPE and a temporary ID
+APJ_BOARD_ID 9300
+APJ_BOARD_TYPE APJ_BOARD_TYPE_HDZERO_HALO
+APJ_BOARD_NAME "HDZero Halo"
+
+# Justification: APJ_BOARD_ID is a local numeric placeholder (choosing 1300 to avoid
+# conflicts with existing IDs). APJ_BOARD_TYPE/APJ_BOARD_NAME chosen for readability.
+# [TODO: REVIEW] Pick final APJ_BOARD_ID that fits ArduPilot's official board ID scheme
+# before submitting upstream; this number may need change.
+
+# Bootloader: no prebuilt HDZERO_HALO bootloader included in this tree; disable flashing
+# to avoid configure-time error. If a bootloader binary is added under Tools/bootloaders,
+# set AP_BOOTLOADER_FLASHING_ENABLED to 1 and update BOOTLOADER_PATH accordingly.
+BOOTLOADER_PATH ../Tools/bootloaders/HDZERO_HALO_bl.bin
+define AP_BOOTLOADER_FLASHING_ENABLED 0
+
+# Justification: There is no bootloader binary currently in Tools/bootloaders for
+# HDZERO_HALO in this tree, so leave flashing disabled to prevent configure errors.
+# Once a verified bootloader binary is available (built or vendor-supplied), flip
+# AP_BOOTLOADER_FLASHING_ENABLED to 1 and set BOOTLOADER_PATH accordingly.
+# [TODO: REVIEW] If you add a bootloader, confirm FLASH_BOOTLOADER_LOAD_KB and
+# FLASH_RESERVE_START_KB in the corresponding hwdef-bl.dat for correct layout.
+
+# HSE value mirrors OSCILLATOR_HZ
+HSE_VALUE 8000000
+
+# Processor features - keep D-cache disabled by default as many H7 hwdefs do
+STM32_H7_DISABLE_DCACHE
+
+# Justification: Disabling D-cache is a conservative default used in several H7
+# board hwdefs. It avoids subtle caching coherence issues with DMA and peripherals
+# until board bring-up verifies cache-safe operation. Re-enable only after testing.
+# [TODO: REVIEW] Re-evaluate if HAL and peripheral DMA usage on Halo allow DCACHE.
+
+# USB CDC Port - vendor/product copied from earlier HDZero attempt; update if vendor differs
+USB_VENDOR 0x1209
+USB_PRODUCT 0x5740
+USB_SERIAL_NUMBER_CHIP_ID
+# USB pins and VBUS behaviour for passthrough and reliable USB bring-up
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+define HAL_USE_USB_VBUS_SENSE 0
+define HAL_USB_FORCE 1
+define HAL_LOGGING_BLOCK_ENABLED 0
+
+# Justification: USB vendor/product values were taken from an earlier HDZero
+# attempt and are common placeholder IDs for community projects. USB_SERIAL_NUMBER_CHIP_ID
+# requests unique serial using the MCU unique ID for easier device identification.
+# [TODO: REVIEW] Confirm vendor/product IDs with vendor or change to upstream-assigned IDs.
+
+## SPI buses
+## Betaflight config for HDZERO_HALO maps SPI1 -> PA5/PA6/PA7 and SPI2 -> PB13/PB14/PB15
+## Use the same assignments here to keep ArduPilot hwdef consistent with Betaflight.
+# SPI1 pins
+PA5 SPI1_SCK SPI1
+PA6 SPI1_MISO SPI1
+PA7 SPI1_MOSI SPI1
+# SPI2 pins
+PB13 SPI2_SCK SPI2
+PB14 SPI2_MISO SPI2
+PB15 SPI2_MOSI SPI2
+
+# Justification: Matches Betaflight's mapping and common H7 breakout wiring for
+# SPI2 on many H7-based flight controllers. SPI2 is used by the external flash
+# (W25Q) in Betaflight's config for this board.
+# [TODO: REVIEW] Validate that SPI2 lines are routed to the same chip-select pins
+# used in SPIDEV declarations below.
+
+## Chip selects
+## Betaflight: FLASH_CS_PIN PB12, GYRO_1_CS PB4, GYRO_2_CS PB3
+PB12 FLASH_CS CS
+PB3 GYRO2_CS CS
+PB4 GYRO1_CS CS
+
+# Justification: Chip select pins PB12/PB4/PB3 are taken directly from Betaflight
+# defines in the HDZERO_HALO config.h (FLASH_CS_PIN, GYRO_1_CS, GYRO_2_CS).
+# These ensures that external devices are deselected during bootloader/idle.
+# [TODO: REVIEW] Confirm PCB silks or schematic for exact CS net names.
+
+## External flash re-enabled: LittleFS on JEDEC NOR. Ensure block logging disabled.
+SPIDEV dataflash SPI2 DEVID1 FLASH_CS MODE3 104*MHZ 104*MHZ
+DATAFLASH littlefs:jedec_nor
+
+# Justification: Betaflight indicates an on-board W25Q128 (JEDEC NOR) flash on SPI2
+# with CS on PB12. We enable ArduPilot dataflash logging into that device using
+# LittleFS filesystem backend. Clock chosen conservatively per W25Q128 typical max.
+# [TODO: REVIEW] Confirm actual external flash part number and adjust max SPI clock.
+
+## I2C
+## Betaflight: I2C1_SCL PB8, I2C1_SDA PB9
+I2C_ORDER I2C1
+PB8 I2C1_SCL I2C1
+PB9 I2C1_SDA I2C1
+
+# Justification: Betaflight maps I2C1 to PB8/PB9; keep that mapping so external
+# sensors and peripherals accessible via I2C use the expected pins.
+# [TODO: REVIEW] If the board routes multiple I2C buses, map additional I2Cx entries.
+
+## UARTs / SERIAL_ORDER
+## Use explicit port names (USARTx/UARTx). These are aligned to Betaflight's pin defines
+## for HDZERO_HALO (see betaflight/configs/HDZERO_HALO/config.h):
+##  - UART1: PB6/PB7
+##  - UART2: PA2/PA3
+##  - UART3: PB11
+##  - UART4: PA1
+##  - UART5: PC12/PD2
+##  - UART7: PE8/PE7
+##  - UART8: PE1/PE0
+SERIAL_ORDER OTG1 USART1 USART2 USART3 UART4 UART5 UART7 UART8
+
+# Justification: SERIAL_ORDER lists USB (OTG1) first to allow USB-booting/debugging,
+# followed by logical UARTs available on the board. The order mirrors the UARTs
+# referenced in the Betaflight config.h, mapped to ArduPilot serial port names.
+# [TODO: REVIEW] Swap order if you prefer a different default (e.g., make Telemetry Mavlink
+# appear earlier for convenience).
+
+# SERIAL1: ELRS / RCIN (match Betaflight mapping)
+SERIAL1_PROTOCOL 23 # RCIN
+SERIAL1_OPTIONS 0
+PB6 USART1_TX USART1
+PB7 USART1_RX USART1
+
+# Justification: SERIAL1 mapped to PB6/PB7 per Betaflight definitions; used here
+# for RC input (e.g., ELRS) in half-duplex mode. Protocol 23 corresponds to RCIN.
+# [TODO: REVIEW] Verify protocol number mapping to ArduPilot's SERIAL protocols table.
+
+# SERIAL2: TELEM2 (MAVLink)
+SERIAL2_PROTOCOL 1 # MAVLink
+PA2 USART2_TX USART2
+PA3 USART2_RX USART2
+
+# Justification: SERIAL2 maps to PA2/PA3 (UART2 in Betaflight) and commonly used
+# as TELEM2 / MAVLink. Protocol=1 is MAVLink in ArduPilot's numbering.
+# [TODO: REVIEW] Confirm numbering of protocol values is still valid in this tree.
+
+# SERIAL3: disabled (no GPS for combat robots)
+SERIAL3_PROTOCOL -1
+PB11 USART3_RX USART3 NODMA
+
+# Justification: SERIAL3 uses PB11 (UART3) as GPS RX per Betaflight mapping.
+# We set the protocol to GPS to allow plug-and-play GPS devices on that port.
+# [TODO: REVIEW] If GPS TX is also required, add SERIAL3_TX pin binding.
+
+# SERIAL4: ESC Telemetry
+SERIAL4_PROTOCOL 16 # ESC Telemetry
+PA1 UART4_RX UART4 NODMA
+
+# Justification: SERIAL4 uses PA1 per Betaflight mapping for ESC telemetry or
+# secondary serial devices. Protocol set to ESC telemetry for common usage.
+# [TODO: REVIEW] Confirm ESC telemetry protocol index for ArduPilot's SERIALs.
+
+# SERIAL5: disabled (no DisplayPort/MSP)
+SERIAL5_PROTOCOL -1
+PC12 UART5_TX UART5 NODMA
+PD2 UART5_RX UART5 NODMA
+
+# Justification: SERIAL5 mapped to PC12/PD2 to match Betaflight's VTX/DisplayPort
+# connectors. Protocol 34 is used here to reflect DisplayPort/MSP; if not used,
+# default to -1 to disable.
+# [TODO: REVIEW] Verify protocol number and whether this port should be enabled by default.
+
+# SERIAL6 & SERIAL7: left disabled by default (user ports)
+SERIAL6_PROTOCOL -1
+PE8 UART7_TX UART7 NODMA
+PE7 UART7_RX UART7 NODMA
+SERIAL7_PROTOCOL -1
+PE1 UART8_TX UART8 NODMA
+PE0 UART8_RX UART8 NODMA
+
+# Justification: SERIAL6 and SERIAL7 left disabled (protocol -1) as user ports.
+# Provide pin mappings from Betaflight so users can enable them later.
+# [TODO: REVIEW] Confirm these pins are free/available on the Halo board and not
+# shared with other peripherals like sensors or SDMMC.
+
+## PWM outputs for motors
+## TMotorH743 used TIM5 on PA0..PA3; Betaflight HDZERO_HALO maps MOTOR1..MOTOR4 to PC6..PC9.
+## Use PC6..PC9 mapped to TIM3 CH1..CH4 accordingly (matches common H7 hwdefs).
+PC6 TIM3_CH1 TIM3 PWM(1) BIDIR
+PC7 TIM3_CH2 TIM3 PWM(2) BIDIR
+PC8 TIM3_CH3 TIM3 PWM(3) BIDIR
+PC9 TIM3_CH4 TIM3 PWM(4) BIDIR
+
+# Justification: Betaflight's mapping uses PC6..PC9 for motor outputs. TIM3 CH1..4
+# chosen to match timer/pin pairing on H743 and common ArduPilot hwdefs.
+# [TODO: REVIEW] Confirm PWM frequency/timings are suitable for target ESCs and
+# that TIM3 isn't used elsewhere (conflict check).
+
+## Beeper and LEDs (match Betaflight pin names)
+TONE_ALARM_PIN PD12
+TONE_ALARM_TIMER TIM4
+TONE_ALARM_CHANNEL 1
+TONE_ALARM_INVERT
+
+# Justification: PD12/TIM4 chosen because many H7 boards use TIM4 for tone alarms
+# and Betaflight references PD12 for buzzer/tones. Invert set per typical active-low
+# buzzer wiring on flight controller boards.
+# [TODO: REVIEW] Validate buzzer polarity on the Halo PCB.
+
+NEOPIXEL_PIN PA10
+NEOPIXEL_TIMER TIM1
+NEOPIXEL_CHANNEL 3
+
+# Justification: A single WS2812/NeoPixel output is often on PA10 on H7 boards and
+# mapped to TIM1 channel 3 for hardware timing support. Keep this mapping to allow
+# LED control; optional to disable if the board lacks an LED ring.
+# [TODO: REVIEW] Confirm the board has a NeoPixel header and that PA10 is routed.
+
+GPIO_OUTPUT PE2
+
+# Justification: Provide a spare GPIO output mapped to PE2; many betaflight boards
+# use PE2 for external power control or LEDs. Left as a generic GPIO for users.
+# [TODO: REVIEW] Ensure PE2 is not needed for SDMMC or other peripherals on the board.
+
+## ADC - analog inputs (VBAT/CURR/RSSI)
+## Betaflight maps VBAT->PC0, RSSI->PC1, CURR->PC2
+PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
+PC2 BATT_CURRENT_SENS ADC1 SCALE(1)
+PC1 RSSI_ADC ADC1
+define HAL_BATT_VOLT_PIN 11
+define HAL_BATT_VOLT_SCALE 11.0
+define HAL_BATT_CURR_PIN 12
+define HAL_BATT_CURR_SCALE 50.0
+define BOARD_RSSI_ANA_PIN 13
+define HAL_BATT_MONITOR_DEFAULT 4
+
+# Justification: Matches Betaflight VBAT/CURR/RSSI ADC pin mappings. Correct ADC
+# channel binding is required for voltage/current measurement features.
+# [TODO: REVIEW] Confirm ADC divider networks on PCB so VBAT measurement scaling
+# is correct; update board-specific resistor divider constants if necessary.
+
+## IMUs
+## Probe ICM42688 on both candidate CS pins (PB3/PB4). Use distinct device names.
+SPIDEV imu1_icm42688 SPI1 DEVID1 GYRO2_CS MODE3 1*MHZ 16*MHZ
+SPIDEV imu2_icm42688 SPI1 DEVID1 GYRO1_CS MODE3 1*MHZ 16*MHZ
+
+# Prefer imu1 first; if absent, imu2 will satisfy INS requirements.
+IMU Invensensev3 SPI:imu1_icm42688 ROTATION_PITCH_180_YAW_90
+IMU Invensensev3 SPI:imu2_icm42688 ROTATION_PITCH_180_YAW_90
+
+# Justification: DRDY pins chosen from Betaflight mapping and/or schematic hints.
+# Rotation values follow physical mounting orientation used in Betaflight for Halo.
+# [TODO: REVIEW] Verify the orientation matrix against an actual board photo/schematic.
+
+## DMA preferences - copied from TMotor baseline and adjusted for H7
+DMA_NOSHARE TIM5_UP TIM3_UP TIM8_UP SPI1* SPI4*
+DMA_PRIORITY TIM5_UP TIM3_UP TIM8_UP SPI1* SPI4*
+
+# Allow auto DMA resolver to pick streams; don't force ADC1 stream here.
+
+# Ensure the SERIAL driver knows which USART/UART peripherals are used on
+# this board. These macros are consumed by the generated ChibiOS mcuconf
+# headers and prevent compile-time errors like "SERIAL driver activated but
+# no USART/UART peripheral assigned". They mirror the SERIAL_ORDER and
+# SERIALn mappings above.
+define STM32_SERIAL_USE_USART1 TRUE
+define STM32_SERIAL_USE_USART2 TRUE
+define STM32_SERIAL_USE_USART3 TRUE
+define STM32_SERIAL_USE_UART4 TRUE
+define STM32_SERIAL_USE_UART5 TRUE
+define STM32_SERIAL_USE_UART7 TRUE
+define STM32_SERIAL_USE_UART8 TRUE
+
+# Justification: DMA preferences copied from TMotor baseline and common H7 hwdefs.
+# Tune these when a board-specific DMA conflict appears during low-level testing.
+# [TODO: REVIEW] Adjust DMA_PRIORITY entries after profiling peripheral usage.
+
+## Sensors and peripherals
+define ALLOW_ARM_NO_COMPASS
+define AP_COMPASS_PROBING_ENABLED 1
+define HAL_I2C_INTERNAL_MASK 0
+define HAL_COMPASS_AUTO_ROT_DEFAULT 2
+define HAL_DEFAULT_INS_FAST_SAMPLE 3
+define HAL_FRAME_TYPE_DEFAULT 12
+define AP_SCRIPTING_ENABLED 1
+define SCRIPTING_HEAP_SIZE 100000
+define HAL_BARO_ALLOW_INIT_NO_BARO 1
+define AP_BARO_PROBE_EXTERNAL_I2C_BUSES 0
+define AP_BARO_ENABLED 0
+define AP_BARO_BACKEND_DEFAULT_ENABLED 0
+define AP_BARO_PROBE_EXT_PARAMETER_ENABLED 0
+
+# Justification: Disable Lua scripting by default to keep bootloader/base image small
+# and avoid pulling additional dependencies. Enable if scripting is required for this board.
+# [TODO: REVIEW] Flag can be enabled if users require onboard scripting features.
+
+## Flash memory declarations
+# Internal flash size is already declared above. We intentionally avoid
+# EXT_FLASH_SIZE_MB and related XIP mappings because the external JEDEC NOR
+# sits on SPI2 (not QSPI/OSPI). It is accessed via SPIDEV/DATAFLASH and
+# LittleFS as a block device, not memory-mapped code space.
+
+## Include common H7 definitions
+include ../common/STM32H7.dat
+
+# Justification: Include shared common H7 defaults (clocking, NVIC tweaks, etc.).
+# This file centralizes values used across many H7 hwdefs to reduce duplication.
+# [TODO: REVIEW] Confirm this include exists in the common folder; if missing,
+# re-create a minimal common/STM32H7.dat with MCU macro defaults.

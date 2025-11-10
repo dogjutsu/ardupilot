@@ -1,5 +1,5 @@
 ARG BASE_IMAGE="ubuntu"
-ARG TAG="22.04"
+ARG TAG="24.04"
 FROM ${BASE_IMAGE}:${TAG}
 WORKDIR /ardupilot
 
@@ -13,16 +13,33 @@ ARG SKIP_AP_COV_ENV=1
 ARG SKIP_AP_GIT_CHECK=1
 ARG DO_AP_STM_ENV=1
 
-RUN groupadd ${USER_NAME} --gid ${USER_GID}\
-    && useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash
+RUN if ! getent group ${USER_GID} >/dev/null 2>&1 ; then \
+        groupadd ${USER_NAME} --gid ${USER_GID}; \
+    else \
+        echo "group with GID ${USER_GID} already exists, skipping groupadd"; \
+    fi && \
+    # Create the ardupilot user if it doesn't exist. If the requested UID is already taken,
+    # create the user without specifying UID so the system assigns the next available one.
+    if id -u ${USER_NAME} >/dev/null 2>&1 ; then \
+        echo "user ${USER_NAME} already exists, skipping useradd"; \
+    else \
+        if id -u ${USER_UID} >/dev/null 2>&1 ; then \
+            echo "UID ${USER_UID} already exists; creating ${USER_NAME} with next available UID"; \
+            useradd -l -m ${USER_NAME} -g ${USER_GID} -s /bin/bash; \
+        else \
+            useradd -l -m ${USER_NAME} -u ${USER_UID} -g ${USER_GID} -s /bin/bash; \
+        fi; \
+    fi
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
     lsb-release \
     sudo \
     tzdata \
     git \
-    default-jre \
-    bash-completion
+    openjdk-17-jre-headless \
+    bash-completion \
+    dfu-util \
+    usbutils
 
 COPY Tools/environment_install/install-prereqs-ubuntu.sh /ardupilot/Tools/environment_install/
 COPY Tools/completion /ardupilot/Tools/completion/
@@ -31,7 +48,7 @@ COPY Tools/completion /ardupilot/Tools/completion/
 RUN echo "ardupilot ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER_NAME}
 RUN chmod 0440 /etc/sudoers.d/${USER_NAME}
 
-RUN chown -R ${USER_NAME}:${USER_NAME} /${USER_NAME}
+RUN chown -R ${USER_NAME}:${USER_NAME} /ardupilot || true
 
 USER ${USER_NAME}
 
@@ -39,7 +56,7 @@ RUN SKIP_AP_EXT_ENV=$SKIP_AP_EXT_ENV SKIP_AP_GRAPHIC_ENV=$SKIP_AP_GRAPHIC_ENV SK
     DO_AP_STM_ENV=$DO_AP_STM_ENV \
     AP_DOCKER_BUILD=1 \
     USER=${USER_NAME} \
-    Tools/environment_install/install-prereqs-ubuntu.sh -y
+    bash Tools/environment_install/install-prereqs-ubuntu.sh -y
 
 # Rectify git perms issue that seems to crop up only on OSX
 RUN git config --global --add safe.directory $PWD
@@ -70,6 +87,6 @@ ENV BUILDLOGS=/tmp/buildlogs
 RUN sudo apt-get clean \
     && sudo rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-ENV CCACHE_MAXSIZE=1G
+ENV CCACHE_MAXSIZE=5G
 ENTRYPOINT ["/ardupilot_entrypoint.sh"]
 CMD ["bash"]

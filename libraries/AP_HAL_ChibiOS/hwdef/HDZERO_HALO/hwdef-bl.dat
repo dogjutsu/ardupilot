@@ -1,0 +1,48 @@
+# HDZERO_HALO hwdef-bl.dat - bootloader hwdef for chibios_pins.py
+# This file documents the bootloader-specific pin/layout choices for the
+# HDZero Halo board. It is derived from common H743 hwdefs (e.g. MatekH743)
+# and adapted to the Betaflight HDZERO_HALO mappings. Every non-trivial value
+# is justified below. Settings with lower confidence are tagged with [TODO: REVIEW].
+
+# MCU class and specific type
+MCU STM32H7xx STM32H743xx
+
+# Comparison vs TMotorH743: same MCU class/type used in `TMotorH743/hwdef-bl.dat`.
+# Justification: Both boards use STM32H7-class MCUs (H743 family). Keeping
+# the same MCU token ensures bootloader/flash geometry code paths are identical.
+# [TODO: REVIEW] Confirm the exact MCU marking on Halo PCBs to ensure sector
+# layout assumptions (e.g., package variant) are correct.
+
+# Board ID (matches main hwdef)
+APJ_BOARD_ID 9300
+
+# Crystal / oscillator frequency
+OSCILLATOR_HZ 8000000
+
+# Internal flash size
+FLASH_SIZE_KB 2048
+
+# Bootloader starts at zero offset
+FLASH_RESERVE_START_KB 0
+
+# Location where bootloader will put firmware (matches main hwdef)
+FLASH_BOOTLOADER_LOAD_KB 384
+
+# [TODO: REVIEW] Confirm whether the Halo vendor or TMotor's bootloader layout is
+# preferable; if matching TMotor (384KB) is required for vendor compatibility,
+# update FLASH_BOOTLOADER_LOAD_KB accordingly.
+
+# USB-only serial for bootloader
+SERIAL_ORDER OTG1
+
+# USB pins
+PA11 OTG_FS_DM OTG1
+PA12 OTG_FS_DP OTG1
+
+# SWD debugging pins
+PA13 JTMS-SWDIO SWD
+PA14 JTCK-SWCLK SWD
+
+# Chip selects - keep high during bootloader
+PB12 FLASH_CS CS
+PB3 GYRO2_CS CS

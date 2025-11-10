@@ -1,0 +1,34 @@
+{
+	"name": "ArduPilot",
+	"build": {
+		"dockerfile": "../Dockerfile",
+		"args": {
+			"USER_NAME": "ardupilot"
+		}
+	},
+	"workspaceMount": "source=${localWorkspaceFolder},target=/ardupilot,type=bind,consistency=cached",
+	"workspaceFolder": "/ardupilot",
+	"mounts": [
+		"source=ardupilot-ccache,target=/home/ardupilot/.ccache,type=volume"
+	],
+    // Allow USB device access for dfu-util
+    "runArgs": [
+        "--device=/dev/bus/usb:/dev/bus/usb",
+        "--privileged"
+    ],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cpptools-extension-pack",
+				"ms-vscode.cpptools-themes",
+				"twxs.cmake",
+				"ms-vscode.cmake-tools",
+				"ms-python.python",
+				"sumneko.lua",
+				"eamodio.gitlens"
+			]
+		}
+	},
+	"remoteUser": "ardupilot"
+}
