@@ -33,8 +33,18 @@ Complete ArduPilot Rover port for the HDZero Halo flight controller (STM32H743).
 
 **Output:** `build/HDZERO_HALO/bin/ardurover.bin`
 
-### 2. Generate Bootloader + App Image
+### 2. Generate Combined Padded Image
 
+ArduPilot produces a `with_bl` Intel HEX that spans bootloader + app. Convert it to a contiguous padded BIN (fills gaps with 0xFF) using `hex_to_padded_bin.py`.
+
+```bash
+# After building rover:
+python3 Tools/hex_to_padded_bin.py \
+  --hex build/HDZERO_HALO/bin/ardurover_with_bl.hex \
+  --out build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
+```
+
+Fallback (if you have a standalone bootloader binary and prefer manual padding):
 ```bash
 python3 Tools/make_with_bl.py \
   -b Tools/bootloaders/HDZERO_HALO_bl.bin \
@@ -42,7 +52,7 @@ python3 Tools/make_with_bl.py \
   -o build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
 ```
 
-**Output:** `ardurover_with_bl_padded.bin` (~1.6 MB, ready for DFU)
+**Output:** `ardurover_with_bl_padded.bin` (~1.6 MB, flash at 0x08000000)
 
 ### 3. Flash Firmware
 
@@ -60,8 +70,7 @@ python3 Tools/make_with_bl.py \
 
 Or manually:
 ```bash
-dfu-util -a 0 -s 0x08000000:leave \
-  -D build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
+dfu-util -a 0 -s 0x08000000:leave -D build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
 ```
 
 ### 4. Connect & Configure
@@ -168,14 +177,20 @@ docker run --device=/dev/bus/usb:/dev/bus/usb --privileged ...
 
 ## Tooling
 
-### `Tools/make_with_bl.py`
-Generates padded bootloader+app image with correct offsets.
-
-**Why needed:** STM32 bootloader at `0x08000000`, app at `0x08060000` (384KB offset). Simple concatenation fails; this tool pads correctly.
+### `Tools/hex_to_padded_bin.py`
+Converts the generated `*_with_bl.hex` into a padded raw binary (fills address gaps with 0xFF).
 
 **Usage:**
 ```bash
-python3 Tools/make_with_bl.py -b <bootloader.bin> -a <app.bin> -o <output.bin>
+python3 Tools/hex_to_padded_bin.py --hex build/HDZERO_HALO/bin/ardurover_with_bl.hex --out build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
+```
+
+### `Tools/make_with_bl.py`
+Legacy alternative when you have separate bootloader + app binaries.
+
+**Usage:**
+```bash
+python3 Tools/make_with_bl.py -b Tools/bootloaders/HDZERO_HALO_bl.bin -a build/HDZERO_HALO/bin/ardurover.bin -o build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
 ```
 
 ### `Tools/flash_hdzero_halo_dfu.sh`

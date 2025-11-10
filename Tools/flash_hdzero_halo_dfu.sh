@@ -11,15 +11,23 @@ BIN_PATH="${1:-$DEFAULT_BIN}"
 
 if [[ ! -f "$BIN_PATH" ]]; then
   echo "No padded combined image found at '$BIN_PATH'"
-  echo "Attempting to generate it from bootloader+app..."
-  BL="Tools/bootloaders/HDZERO_HALO_bl.bin"
-  APP="build/HDZERO_HALO/bin/ardurover.bin"
-  if [[ ! -f "$BL" || ! -f "$APP" ]]; then
-    echo "Missing inputs: $BL and/or $APP not found."
-    echo "Please build the app and ensure bootloader exists, or pass a custom .bin path."
-    exit 1
+  echo "Attempting to generate it..."
+  # Preferred: convert the generated with_bl HEX into a padded BIN
+  HEX_IN="build/HDZERO_HALO/bin/ardurover_with_bl.hex"
+  if [[ -f "$HEX_IN" ]]; then
+    echo "Found $HEX_IN, converting to padded BIN..."
+    python3 Tools/hex_to_padded_bin.py --hex "$HEX_IN" --out "$BIN_PATH"
+  else
+    echo "with_bl HEX not found; falling back to bootloader+app padding"
+    BL="Tools/bootloaders/HDZERO_HALO_bl.bin"
+    APP="build/HDZERO_HALO/bin/ardurover.bin"
+    if [[ ! -f "$BL" || ! -f "$APP" ]]; then
+      echo "Missing inputs: $HEX_IN or ($BL and/or $APP) not found."
+      echo "Please build the app and ensure inputs exist, or pass a custom .bin path."
+      exit 1
+    fi
+    python3 Tools/make_with_bl.py -b "$BL" -a "$APP" -o "$BIN_PATH"
   fi
-  python3 Tools/make_with_bl.py -b "$BL" -a "$APP" -o "$BIN_PATH"
 fi
 
 # Require dfu-util in PATH
