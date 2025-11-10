@@ -68,6 +68,23 @@ How to test
 3. After configure succeeds, try a minimal build target to ensure compilation
    and linkage succeed.
 
+Flashing (padded image)
+
+After building Rover, convert the generated `with_bl` HEX into a padded BIN, then flash via DFU:
+
+```bash
+# From repo root, after ./waf rover
+python3 Tools/hex_to_padded_bin.py \
+  --hex build/HDZERO_HALO/bin/ardurover_with_bl.hex \
+  --out build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
+
+# Put board in DFU mode, then flash the padded BIN at 0x08000000
+dfu-util -a 0 -s 0x08000000:leave \
+  -D build/HDZERO_HALO/bin/ardurover_with_bl_padded.bin
+```
+
+Tip: `Tools/flash_hdzero_halo_dfu.sh` will auto-generate the padded BIN from the `with_bl` HEX if missing, then perform the DFU write.
+
 Files updated
 
 - `hwdef.dat` — the new HDZERO_HALO hardware definition derived from TMotorH743.
