@@ -416,6 +416,14 @@ gcs:send_text(6, string.format("Lua mem: %.1f KB", collectgarbage("count")))
 gcs:send_text(6, string.format("Free RAM: %d KB", hal.mem_free() / 1024))
 ```
 
+#### Quick Profiler Script
+
+Use the bundled `scripts/mem_prof.lua` to periodically report heap, free RAM and per-cycle CPU time via STATUSTEXT. Upload to `@FLASH/scripts/` and watch the Messages tab:
+
+```
+LuaProf #12 heap=96.3KB free=312.0KB cpu=320us
+```
+
 ### Best Practices
 
 1. **Keep scripts simple:** Offload high-rate math to C++ modules

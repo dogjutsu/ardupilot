@@ -101,6 +101,7 @@ Additional notes (internal build)
 
 - Lua scripting: enabled by default with a 100KB heap (`SCRIPTING_HEAP_SIZE 100000`). Increase only if RAM headroom allows; aim for >250KB free RAM after build.
 - Heap sizing guidance: start at 100KB. If free RAM after boot dips below ~250KB, reduce to 80KB. If scripts require more complex buffers and free RAM >400KB, you may raise to 120KB. Profile by adding a lightweight Lua script that reports `collectgarbage('count')` and approximate free memory via MAVLink STATUSTEXT.
+- Lua profiler: a ready-to-use script is provided at `scripts/mem_prof.lua`. Upload to `@FLASH/scripts/` and watch STATUSTEXT for lines like `LuaProf #N heap=XX.XKB free=YYY.YKB cpu=Z us`.
 - Passthrough over USB (MAVLink SERIAL_CONTROL):
   - ELRS firmware updates via UART1 (device `SERIAL_CONTROL_SERIAL1`).
   - ESC firmware/config tools via UART2/4/7/8 as needed (devices `SERIAL_CONTROL_SERIAL2`, etc.).
