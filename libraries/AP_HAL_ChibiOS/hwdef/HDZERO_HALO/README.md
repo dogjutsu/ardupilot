@@ -29,8 +29,8 @@ Summary of differences (with justification)
   - Reason: Ensures serial peripherals in ArduPilot align with physical pins used
     by Betaflight for the Halo. Defaults set for Rover use: SERIAL1=RCIN (ELRS), SERIAL2=MAVLink, SERIAL4=ESC Telemetry. SERIAL3/SERIAL5 disabled.
 
-- PWM outputs: map MOTOR1..4 to PC6..PC9 using TIM3 CH1..CH4; repurpose beeper PD12 (TIM4_CH1) as PWM5.  
-  - Reason: Betaflight uses PC6..PC9 for motors; using TIM3 matches many H7 hwdefs. PD12 provides an additional PWM-capable output for weapon ESCs on combat robots.
+- PWM outputs: map MOTOR1..4 to PC6..PC9 using TIM3 CH1..CH4; repurpose LED PA10 (TIM1_CH3) as PWM5 and beeper PD12 (TIM4_CH1) as PWM6.
+  - Reason: Betaflight uses PC6..PC9 for motors; using TIM3 matches many H7 hwdefs. PA10 (LED) and PD12 (beeper) provide additional PWM-capable outputs for weapon/auxiliary ESCs on combat robots.
 
 - Bootloader flashing disabled by default (`AP_BOOTLOADER_FLASHING_ENABLED 0`).  
   - Reason: This repo does not include an HDZERO_HALO bootloader binary, and
@@ -46,7 +46,8 @@ PWM/Outputs Mapping
 | PWM2 | PC7 | TIM3_CH2 | Motor/ESC |
 | PWM3 | PC8 | TIM3_CH3 | Motor/ESC |
 | PWM4 | PC9 | TIM3_CH4 | Motor/ESC |
-| PWM5 | PD12 | TIM4_CH1 | Repurposed from beeper; use for weapon ESC |
+| PWM5 | PA10 | TIM1_CH3 | Repurposed from LED; use for weapon/auxiliary ESC |
+| PWM6 | PD12 | TIM4_CH1 | Repurposed from beeper; use for weapon/auxiliary ESC |
 
 Notes:
 - All outputs support PWM and DShot; BiDir DShot available via SERVO_BLH_BDMASK.
@@ -88,8 +89,7 @@ Tip: `Tools/flash_hdzero_halo_dfu.sh` will auto-generate the padded BIN from the
 Files updated
 
 - `hwdef.dat` — the new HDZERO_HALO hardware definition derived from TMotorH743.
-- `README.md` — this file with the rationale and testing steps.
-  - Updated to include PWM5 on PD12 (beeper repurposed).
+  - Updated to include PWM5 on PA10 (LED repurposed) and PWM6 on PD12 (beeper repurposed).
 
 References
 
@@ -107,8 +107,7 @@ Additional notes (internal build)
   - ESC firmware/config tools via UART2/4/7/8 as needed (devices `SERIAL_CONTROL_SERIAL2`, etc.).
   - Use EXCLUSIVE | BLOCKING flags; ArduPilot disables flow control during bootloader comms.
 - GPS/DisplayPort: disabled by default for combat robots.
-- CAN: not configured; PD0/PD1 are typical CAN1 pins on H743 and can be mapped later if needed.
-- PWM outputs: PC6..PC9 via TIM3 CH1..4; suitable for PWM/DSHOT.
+- PWM outputs: PC6..PC9 (TIM3 CH1..4), PA10 (TIM1_CH3), PD12 (TIM4_CH1); 6 total outputs suitable for PWM/DSHOT.
  - Hybrid control recommendation: use Lua at 20–50Hz for supervisory logic (bias calculation, mode gating). For sub-10ms torque counter-steer, implement a small C++ module publishing a filtered `torque_bias_yaw` value to a parameter Lua reads. This keeps high-rate fusion out of the scripting VM.
  - Passthrough device IDs: ArduPilot maps `SERIAL_CONTROL_SERIAL0+N` to `SERIALN`. Example: ELRS on SERIAL1 => device=SERIAL_CONTROL_SERIAL1.
 

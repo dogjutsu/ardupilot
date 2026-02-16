@@ -210,28 +210,27 @@ PC6 TIM3_CH1 TIM3 PWM(1) BIDIR
 PC7 TIM3_CH2 TIM3 PWM(2) BIDIR
 PC8 TIM3_CH3 TIM3 PWM(3) BIDIR
 PC9 TIM3_CH4 TIM3 PWM(4) BIDIR
-## Repurpose beeper (PD12 TIM4_CH1) as a 5th PWM-capable output for weapon ESC
-PD12 TIM4_CH1 TIM4 PWM(5) BIDIR
+## Repurpose LED (PA10 TIM1_CH3) as 5th PWM output, beeper (PD12) as 6th
+PA10 TIM1_CH3 TIM1 PWM(5) BIDIR
+PD12 TIM4_CH1 TIM4 PWM(6) BIDIR
 
 # Justification: Betaflight's mapping uses PC6..PC9 for motor outputs. TIM3 CH1..4
-# chosen to match timer/pin pairing on H743 and common ArduPilot hwdefs.
-# PD12/TIM4_CH1 previously used for beeper is repurposed to PWM(5) for an extra
-# motor/ESC output (e.g. weapon). If audible beeper is required, remap it.
+# provides these. All declare BIDIR for bidirectional DShot support (ESC telemetry).
+# PA10/TIM1_CH3 previously used for NeoPixel is repurposed to PWM(5) for weapon/aux.
+# PD12/TIM4_CH1 previously used for beeper is repurposed to PWM(6) for weapon/aux.
+# This gives 6 total PWM outputs for complex combat robot configurations.
 # [TODO: REVIEW] Confirm PWM frequency/timings are suitable for target ESCs and
-# that TIM3/TIM4 aren't conflicting with other peripherals.
+# bidirectional DShot ESC telemetry works on all 6 outputs.
+## Beeper and LEDs (both repurposed as PWM outputs)
+# Beeper removed: PD12 repurposed as PWM(6).
+# NeoPixel removed: PA10 repurposed as PWM(5).
+# Both pins now available as motor/weapon ESC outputs for combat robots.
+# If NeoPixel LED strip or audible beeper needed, they can be added back by
+# removing the PWM declarations above and uncommenting below:
+# NEOPIXEL_PIN PA10
+# NEOPIXEL_TIMER TIM1
+# NEOPIXEL_CHANNEL 3
 
-## Beeper and LEDs (match Betaflight pin names)
-# Beeper removed: PD12 repurposed as PWM(5). Add a beeper back only if needed by
-# mapping an alternate pin and timer.
-
-NEOPIXEL_PIN PA10
-NEOPIXEL_TIMER TIM1
-NEOPIXEL_CHANNEL 3
-
-# Justification: A single WS2812/NeoPixel output is often on PA10 on H7 boards and
-# mapped to TIM1 channel 3 for hardware timing support. Keep this mapping to allow
-# LED control; optional to disable if the board lacks an LED ring.
-# [TODO: REVIEW] Confirm the board has a NeoPixel header and that PA10 is routed.
 
 GPIO_OUTPUT PE2
 
@@ -247,7 +246,7 @@ PC1 RSSI_ADC ADC1
 define HAL_BATT_VOLT_PIN 11
 define HAL_BATT_VOLT_SCALE 11.0
 define HAL_BATT_CURR_PIN 12
-define HAL_BATT_CURR_SCALE 50.0
+define HAL_BATT_CURR_SCALE 100.0  # Updated from 50.0 based on Betaflight comparison (BeastH7 V2 uses 100 in both systems)
 define BOARD_RSSI_ANA_PIN 13
 define HAL_BATT_MONITOR_DEFAULT 4
 
@@ -270,8 +269,8 @@ IMU Invensensev3 SPI:imu2_icm42688 ROTATION_PITCH_180_YAW_90
 # [TODO: REVIEW] Verify the orientation matrix against an actual board photo/schematic.
 
 ## DMA preferences - copied from TMotor baseline and adjusted for H7
-DMA_NOSHARE TIM5_UP TIM3_UP TIM4_UP TIM8_UP SPI1* SPI4*
-DMA_PRIORITY TIM5_UP TIM3_UP TIM4_UP TIM8_UP SPI1* SPI4*
+DMA_NOSHARE TIM1_UP TIM3_UP TIM4_UP SPI1* SPI4*
+DMA_PRIORITY TIM1_UP TIM3_UP TIM4_UP SPI1* SPI4*
 
 # Allow auto DMA resolver to pick streams; don't force ADC1 stream here.
 
