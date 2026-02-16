@@ -1151,8 +1151,17 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         if abs(x.alt_msl - (original_alt+30)) > 10:
             raise NotAchievedException("Bad absalt (want=%f vs got=%f)" % (original_alt+30, x.alt_msl))
 
-        self.change_mode('LOITER')
-        self.delay_sim_time(10)
+        loc = self.mav.location()
+        self.run_cmd_int(
+            mavutil.mavlink.MAV_CMD_DO_REPOSITION,
+            p2=mavutil.mavlink.MAV_DO_REPOSITION_FLAGS_CHANGE_MODE,
+            p5=int(loc.lat * 1e7),
+            p6=int(loc.lng * 1e7),
+            p7=x.alt_rel,    # alt
+            frame=mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+        )
+        expected_radius = 100
+        self.wait_circling_point_with_radius(loc, expected_radius)
 
         self.context_collect('CAMERA_FEEDBACK')
         self.set_rc(12, 2000)
@@ -1425,49 +1434,6 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             if want != got:
                 raise NotAchievedException("fence status incorrect; %s want=%u got=%u" %
                                            (name, want, got))
-
-    def wait_circling_point_with_radius(self, loc, want_radius, epsilon=5.0, min_circle_time=5, timeout=120):
-        on_radius_start_heading = None
-        average_radius = 0.0
-        circle_time_start = 0
-        done_time = False
-        done_angle = False
-        tstart = self.get_sim_time()
-        while True:
-            if self.get_sim_time() - tstart > timeout:
-                raise AutoTestTimeoutException("Did not get onto circle")
-            here = self.mav.location()
-            got_radius = self.get_distance(loc, here)
-            average_radius = 0.95*average_radius + 0.05*got_radius
-            on_radius = abs(got_radius - want_radius) < epsilon
-            m = self.assert_receive_message('VFR_HUD')
-            heading = m.heading
-            on_string = "off"
-            got_angle = ""
-            if on_radius_start_heading is not None:
-                got_angle = "%0.2f" % abs(on_radius_start_heading - heading) # FIXME
-                on_string = "on"
-
-            want_angle = 180 # we don't actually get this (angle-substraction issue.  But we get enough...
-            self.progress("wait-circling: got-r=%0.2f want-r=%f avg-r=%f %s want-a=%0.1f got-a=%s" %
-                          (got_radius, want_radius, average_radius, on_string, want_angle, got_angle))
-            if on_radius:
-                if on_radius_start_heading is None:
-                    on_radius_start_heading = heading
-                    average_radius = got_radius
-                    circle_time_start = self.get_sim_time()
-                    continue
-                if abs(on_radius_start_heading - heading) > want_angle: # FIXME
-                    done_angle = True
-                if self.get_sim_time() - circle_time_start > min_circle_time:
-                    done_time = True
-                if done_time and done_angle:
-                    return
-                continue
-            if on_radius_start_heading is not None:
-                average_radius = 0.0
-            on_radius_start_heading = None
-            circle_time_start = 0
 
     def MODE_SWITCH_RESET(self):
         '''test the MODE_SWITCH_RESET auxiliary function'''
@@ -3204,7 +3170,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             "SERIAL4_PROTOCOL": 36,
             "SERIAL4_BAUD": 230400,
             "GPS1_TYPE": 1, # Auto
-            "GPS2_TYPE": 21, # EARHS
+            "GPS2_TYPE": 21, # EAHRS
             "AHRS_EKF_TYPE": 11,
             "INS_GYR_CAL": 1,
             "EAHRS_SENSORS": 13, # GPS is enabled
@@ -6462,26 +6428,13 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
 
         self.disarm_vehicle()
 
-    def start_flying_simple_rehome_mission(self, items):
-        '''uploads items, changes mode to auto, waits ready to arm and arms
-        vehicle.  If the first item it a takeoff you can expect the
-        vehicle to fly after this method returns
-        '''
-
-        self.upload_simple_relhome_mission(items)
-
-        self.change_mode('AUTO')
-        self.wait_ready_to_arm()
-
-        self.arm_vehicle()
-
     def InteractTest(self):
         '''just takeoff'''
 
         if self.mavproxy is None:
             raise NotAchievedException("Must be started with --map")
 
-        self.start_flying_simple_rehome_mission([
+        self.start_flying_simple_relhome_mission([
             (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 30),
             (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 800, 0, 0),
             (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 800, 800, 0),
@@ -6517,7 +6470,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
     def MAV_CMD_NAV_RETURN_TO_LAUNCH(self):
         '''test receiving MAV_CMD_NAV_RETURN_TO_LAUNCH from GCS'''
         self.set_parameter('RTL_AUTOLAND', 1)
-        self.start_flying_simple_rehome_mission([
+        self.start_flying_simple_relhome_mission([
             (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 30),
             (mavutil.mavlink.MAV_CMD_NAV_LOITER_UNLIM, 0, 0, 30),
             self.create_MISSION_ITEM_INT(
@@ -7212,52 +7165,106 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
     def mavlink_AIRSPEED(self):
         '''check receiving of two airspeed sensors'''
         self.set_parameters({
-            "ARSPD_PIN": 2,
-            "ARSPD_RATIO": 0,
-            "ARSPD2_RATIO": 4,
-            "ARSPD2_TYPE": 3,  # MS5525
-            "ARSPD2_BUS": 1,
+            "ARSPD_PIN": 1,
+            "ARSPD_RATIO": 2,
+            "ARSPD2_RATIO": 2,
+            "ARSPD2_TYPE": 100,
             "ARSPD2_AUTOCAL": 1,
         })
         self.reboot_sitl()
 
-        self.start_subtest('Ensure we get both instances')
-        self.wait_message_field_values('AIRSPEED', {
-            "id": 0,
-            "flags": mavutil.mavlink.AIRSPEED_SENSOR_USING,
-        })
-        self.wait_message_field_values('AIRSPEED', {
-            "id": 1,
-            "flags": 0,
-        })
+        # Add listener to airspeed message
+        airspeed_active = [None, None]
+
+        def update_airspeed_active(mav, m):
+            if m.get_type() != 'AIRSPEED':
+                return
+            # 2 here is the correct value of mavutil.mavlink.AIRSPEED_SENSOR_USING
+            # However it was wrong in the MAVLink spec for a while
+            airspeed_active[m.id] = (m.flags & 2) != 0
+
+        self.install_message_hook_context(update_airspeed_active)
 
         self.wait_ready_to_arm()
-        self.takeoff()
+
+        self.start_subtest('Ensure we get both instances')
+        if any(v is None for v in airspeed_active):
+            raise NotAchievedException("Did not get both airspeed messages %s" % str(airspeed_active))
+
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        self.takeoff(mode="TAKEOFF", alt=100)
+
+        self.start_subtest("Now testing sensor 1 is used in flight")
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
 
         self.start_subtest("Now testing failure of sensor 1 - fail to many m/s")
         self.set_parameter("SIM_ARSPD_FAIL", 60)
 
         # airspeed sensor never becomes unhealthy - we just stop using
-        # it as EKF3 starts to reject:
-        self.wait_message_field_values('AIRSPEED', {
-            "id": 0,
-            "flags": 0,
-        })
-        # ArduPilot's airspeed redundancy is only available through
-        # EKF3 affinity:
-        self.progress("Checking we're not using second airspeed sensor")
-        self.wait_message_field_values('AIRSPEED', {
-            "id": 1,
-            "flags": 0,
-        })
-        self.set_parameter("SIM_ARSPD_FAIL", 0)
-        self.fly_home_land_and_disarm()
+        # it as EKF3 starts to reject, allow 10 seconds
+        self.delay_sim_time(10)
+        if airspeed_active != [False, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
 
-    def RudderArmingWithArmingChecksZero(self):
-        '''check we can't arm with rudder even if checks are disabled'''
+        # Re-enable sensors, after some time the sensor should be re-enabled
+        self.set_parameter("SIM_ARSPD_FAIL", 0)
+        self.delay_sim_time(60)
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        self.start_subtest("Now testing combinations of use and primary params")
+
+        # Changing the primary should have no effect as the second sensor is not marked to use
+        self.set_parameter("ARSPD_PRIMARY", 1)
+        self.delay_sim_time(10)
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        # Allowing the second sensor to be used should not result in a switch when armed despite the primary parameter
+        self.set_parameter("ARSPD2_USE", 1)
+        self.delay_sim_time(10)
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        # Changing the primary back to the first sensor, and then again to the second
+        # Now the second can be used it should switch
+        self.set_parameter("ARSPD_PRIMARY", 0)
+        self.set_parameter("ARSPD_PRIMARY", 1)
+        self.delay_sim_time(10)
+        if airspeed_active != [False, True]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        # Now stop using the second
+        self.set_parameter("ARSPD2_USE", 0)
+        self.delay_sim_time(10)
+        if airspeed_active != [True, False]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+        self.fly_home_land_and_disarm()
+        self.change_mode("MANUAL")
+        self.clear_mission(mavutil.mavlink.MAV_MISSION_TYPE_ALL)
+
+        self.start_subtest("Now testing primary arming check")
+
+        # Should not be able to arm with primary sensor not set to use
+        self.assert_prearm_failure("Airspeed: not using Primary (2)")
+
+        self.start_subtest("Testing primary changes when disarmed")
+
+        # Now the vehicle is disarmed, enabling use for the primary sensor should result in it being used
+        self.set_parameter("ARSPD2_USE", 1)
+        self.delay_sim_time(10)
+        if airspeed_active != [False, True]:
+            raise NotAchievedException("Not using expected airspeed sensors %s" % str(airspeed_active))
+
+    def RudderArmingWithArmingChecksSkipped(self):
+        '''check we can't arm with rudder even if all checks are skipped'''
         self.set_parameters({
             "ARMING_RUDDER": 0,
-            "ARMING_CHECK": 0,
+            "ARMING_SKIPCHK": -1,
             "RC4_REVERSED": 0,
         })
         self.reboot_sitl()
@@ -7787,6 +7794,15 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         self.remove_installed_script_module("pid.lua")
         self.remove_installed_script_module("mavlink_attitude.lua")
 
+    def PreflightRebootComponent(self):
+        '''Ensure that PREFLIGHT_REBOOT commands sent to components don't reboot Autopilot'''
+        self.run_cmd_int(
+            mavutil.mavlink.MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN,
+            p1=1, # Reboot autopilot
+            want_result=mavutil.mavlink.MAV_RESULT_DENIED,
+            target_compid=mavutil.mavlink.MAV_COMP_ID_GIMBAL
+        )
+
     def tests(self):
         '''return list of all tests'''
         ret = []
@@ -7956,13 +7972,14 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             self.DO_CHANGE_ALTITUDE,
             self.SET_POSITION_TARGET_GLOBAL_INT_for_altitude,
             self.MAV_CMD_NAV_LOITER_TURNS_zero_turn,
-            self.RudderArmingWithArmingChecksZero,
+            self.RudderArmingWithArmingChecksSkipped,
             self.TerrainLoiterToCircle,
             self.FenceDoubleBreach,
             self.ScriptedArmingChecksApplet,
             self.ScriptedArmingChecksAppletEStop,
             self.ScriptedArmingChecksAppletRally,
             self.PlaneFollowAppletSanity,
+            self.PreflightRebootComponent,
         ]
 
     def tests1c(self):

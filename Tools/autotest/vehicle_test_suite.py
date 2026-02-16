@@ -728,6 +728,66 @@ class WaitAndMaintainServoChannelValue(WaitAndMaintain):
         return m_value
 
 
+class WaitAndMaintainAttitude(WaitAndMaintain):
+    def __init__(self, test_suite, desroll=None, despitch=None, **kwargs):
+        super().__init__(test_suite, **kwargs)
+        self.desroll = desroll
+        self.despitch = despitch
+
+        if self.desroll is None and self.despitch is None:
+            raise ValueError("despitch or desroll must be supplied")
+
+    def announce_start_text(self):
+        conditions = []
+        if self.desroll is not None:
+            conditions.append(f"roll={self.desroll}")
+        if self.despitch is not None:
+            conditions.append(f"pitch={self.despitch}")
+
+        return f"Waiting for {' and '.join(conditions)}"
+
+    def get_target_value(self):
+        return (self.desroll, self.despitch)
+
+    def get_current_value(self):
+        m = self.test_suite.assert_receive_message('ATTITUDE', timeout=10)
+        self.last_ATTITUDE = m
+        return (math.degrees(m.roll), math.degrees(m.pitch))
+
+    def validate_value(self, value):
+        (candidate_roll, candidate_pitch) = value
+
+        if self.desroll is not None:
+            roll_error = abs(self.desroll - candidate_roll)
+            if roll_error > self.epsilon:
+                return False
+
+        if self.despitch is not None:
+            pitch_error = abs(self.despitch - candidate_pitch)
+            if pitch_error > self.epsilon:
+                return False
+
+        return True
+
+    def success_text(self):
+        return "Attained attitude"
+
+    def timeoutexception(self):
+        return AutoTestTimeoutException("Failed to attain attitude")
+
+    def progress_text(self, current_value):
+        (achieved_roll, achieved_pitch) = current_value
+        axis_progress = []
+
+        if self.desroll is not None:
+            axis_progress.append(f"r={achieved_roll: >8.3f} des-r={self.desroll}")
+
+        if self.despitch is not None:
+            axis_progress.append(f"p={achieved_pitch: >8.3f} des-p={self.despitch}")
+
+        return " ".join(axis_progress)
+
+
 class MSP_Generic(Telem):
     def __init__(self, destination_address):
         super(MSP_Generic, self).__init__(destination_address)
@@ -2150,16 +2210,7 @@ class TestSuite(abc.ABC):
         count = self.count_expected_fence_lines_in_filepath(filepath)
         mavproxy.send('fence load %s\n' % filepath)
 #        self.mavproxy.expect("Loaded %u (geo-)?fence" % count)
-        tstart = self.get_sim_time_cached()
-        while True:
-            t2 = self.get_sim_time_cached()
-            if t2 - tstart > 10:
-                raise AutoTestTimeoutException("Failed to do load")
-            newcount = self.get_parameter("FENCE_TOTAL")
-            self.progress("fence total: %u want=%u" % (newcount, count))
-            if count == newcount:
-                break
-            self.delay_sim_time(1)
+        self.wait_parameter_value("FENCE_TOTAL", count, timeout=20)
 
     def get_fence_point(self, idx, target_system=1, target_component=1):
         self.mav.mav.fence_fetch_point_send(target_system,
@@ -2546,165 +2597,7 @@ class TestSuite(abc.ABC):
             17 # squawk
         )
 
-    def get_sim_parameter_documentation_get_whitelist(self):
-        # common parameters
-        ret = set([
-            "SIM_IMUT1_ACC1_X",
-            "SIM_IMUT1_ACC1_Y",
-            "SIM_IMUT1_ACC1_Z",
-            "SIM_IMUT1_ACC2_X",
-            "SIM_IMUT1_ACC2_Y",
-            "SIM_IMUT1_ACC2_Z",
-            "SIM_IMUT1_ACC3_X",
-            "SIM_IMUT1_ACC3_Y",
-            "SIM_IMUT1_ACC3_Z",
-            "SIM_IMUT1_ENABLE",
-            "SIM_IMUT1_GYR1_X",
-            "SIM_IMUT1_GYR1_Y",
-            "SIM_IMUT1_GYR1_Z",
-            "SIM_IMUT1_GYR2_X",
-            "SIM_IMUT1_GYR2_Y",
-            "SIM_IMUT1_GYR2_Z",
-            "SIM_IMUT1_GYR3_X",
-            "SIM_IMUT1_GYR3_Y",
-            "SIM_IMUT1_GYR3_Z",
-            "SIM_IMUT1_TMAX",
-            "SIM_IMUT1_TMIN",
-            "SIM_IMUT2_ACC1_X",
-            "SIM_IMUT2_ACC1_Y",
-            "SIM_IMUT2_ACC1_Z",
-            "SIM_IMUT2_ACC2_X",
-            "SIM_IMUT2_ACC2_Y",
-            "SIM_IMUT2_ACC2_Z",
-            "SIM_IMUT2_ACC3_X",
-            "SIM_IMUT2_ACC3_Y",
-            "SIM_IMUT2_ACC3_Z",
-            "SIM_IMUT2_ENABLE",
-            "SIM_IMUT2_GYR1_X",
-            "SIM_IMUT2_GYR1_Y",
-            "SIM_IMUT2_GYR1_Z",
-            "SIM_IMUT2_GYR2_X",
-            "SIM_IMUT2_GYR2_Y",
-            "SIM_IMUT2_GYR2_Z",
-            "SIM_IMUT2_GYR3_X",
-            "SIM_IMUT2_GYR3_Y",
-            "SIM_IMUT2_GYR3_Z",
-            "SIM_IMUT2_TMAX",
-            "SIM_IMUT2_TMIN",
-            "SIM_IMUT3_ACC1_X",
-            "SIM_IMUT3_ACC1_Y",
-            "SIM_IMUT3_ACC1_Z",
-            "SIM_IMUT3_ACC2_X",
-            "SIM_IMUT3_ACC2_Y",
-            "SIM_IMUT3_ACC2_Z",
-            "SIM_IMUT3_ACC3_X",
-            "SIM_IMUT3_ACC3_Y",
-            "SIM_IMUT3_ACC3_Z",
-            "SIM_IMUT3_ENABLE",
-            "SIM_IMUT3_GYR1_X",
-            "SIM_IMUT3_GYR1_Y",
-            "SIM_IMUT3_GYR1_Z",
-            "SIM_IMUT3_GYR2_X",
-            "SIM_IMUT3_GYR2_Y",
-            "SIM_IMUT3_GYR2_Z",
-            "SIM_IMUT3_GYR3_X",
-            "SIM_IMUT3_GYR3_Y",
-            "SIM_IMUT3_GYR3_Z",
-            "SIM_IMUT3_TMAX",
-            "SIM_IMUT3_TMIN",
-            "SIM_IMUT4_ACC1_X",
-            "SIM_IMUT4_ACC1_Y",
-            "SIM_IMUT4_ACC1_Z",
-            "SIM_IMUT4_ACC2_X",
-            "SIM_IMUT4_ACC2_Y",
-            "SIM_IMUT4_ACC2_Z",
-            "SIM_IMUT4_ACC3_X",
-            "SIM_IMUT4_ACC3_Y",
-            "SIM_IMUT4_ACC3_Z",
-            "SIM_IMUT4_ENABLE",
-            "SIM_IMUT4_GYR1_X",
-            "SIM_IMUT4_GYR1_Y",
-            "SIM_IMUT4_GYR1_Z",
-            "SIM_IMUT4_GYR2_X",
-            "SIM_IMUT4_GYR2_Y",
-            "SIM_IMUT4_GYR2_Z",
-            "SIM_IMUT4_GYR3_X",
-            "SIM_IMUT4_GYR3_Y",
-            "SIM_IMUT4_GYR3_Z",
-            "SIM_IMUT4_TMAX",
-            "SIM_IMUT4_TMIN",
-            "SIM_IMUT5_ACC1_X",
-            "SIM_IMUT5_ACC1_Y",
-            "SIM_IMUT5_ACC1_Z",
-            "SIM_IMUT5_ACC2_X",
-            "SIM_IMUT5_ACC2_Y",
-            "SIM_IMUT5_ACC2_Z",
-            "SIM_IMUT5_ACC3_X",
-            "SIM_IMUT5_ACC3_Y",
-            "SIM_IMUT5_ACC3_Z",
-            "SIM_IMUT5_ENABLE",
-            "SIM_IMUT5_GYR1_X",
-            "SIM_IMUT5_GYR1_Y",
-            "SIM_IMUT5_GYR1_Z",
-            "SIM_IMUT5_GYR2_X",
-            "SIM_IMUT5_GYR2_Y",
-            "SIM_IMUT5_GYR2_Z",
-            "SIM_IMUT5_GYR3_X",
-            "SIM_IMUT5_GYR3_Y",
-            "SIM_IMUT5_GYR3_Z",
-            "SIM_IMUT5_TMAX",
-            "SIM_IMUT5_TMIN",
-            "SIM_MAG2_DIA_X",
-            "SIM_MAG2_DIA_Y",
-            "SIM_MAG2_DIA_Z",
-            "SIM_MAG2_ODI_X",
-            "SIM_MAG2_ODI_Y",
-            "SIM_MAG2_ODI_Z",
-            "SIM_MAG2_OFS_X",
-            "SIM_MAG2_OFS_Y",
-            "SIM_MAG2_OFS_Z",
-            "SIM_MAG3_DIA_X",
-            "SIM_MAG3_DIA_Y",
-            "SIM_MAG3_DIA_Z",
-            "SIM_MAG3_ODI_X",
-            "SIM_MAG3_ODI_Y",
-            "SIM_MAG3_ODI_Z",
-            "SIM_MAG3_OFS_X",
-            "SIM_MAG3_OFS_Y",
-            "SIM_MAG3_OFS_Z",
-            "SIM_MAG_ALY_X",
-            "SIM_MAG_ALY_Y",
-            "SIM_MAG_ALY_Z",
-            "SIM_MAG1_DIA_X",
-            "SIM_MAG1_DIA_Y",
-            "SIM_MAG1_DIA_Z",
-            "SIM_MAG_MOT_X",
-            "SIM_MAG_MOT_Y",
-            "SIM_MAG_MOT_Z",
-            "SIM_MAG1_ODI_X",
-            "SIM_MAG1_ODI_Y",
-            "SIM_MAG1_ODI_Z",
-            "SIM_MAG1_OFS_X",
-            "SIM_MAG1_OFS_Y",
-            "SIM_MAG1_OFS_Z",
-        ])
-
-        vinfo_key = self.vehicleinfo_key()
-        if vinfo_key == "Rover":
-            ret.update([
-            ])
-        if vinfo_key == "ArduSub":
-            ret.update([
-                "SIM_BUOYANCY",
-            ])
-
-        return ret
-
     def test_parameter_documentation_get_all_parameters(self):
-        # this is a set of SIM_parameters which we know aren't currently
-        # documented - but they really should be.  We use this whitelist
-        # to ensure any new SIM_ parameters added are documented
-        sim_parameters_missing_documentation = self.get_sim_parameter_documentation_get_whitelist()
 
         xml_filepath = os.path.join(self.buildlogs_dirpath(), "apm.pdef.xml")
         param_parse_filepath = os.path.join(self.rootdir(), 'Tools', 'autotest', 'param_metadata', 'param_parse.py')
@@ -2737,20 +2630,11 @@ class TestSuite(abc.ABC):
 
         fail = False
         for param in parameters.keys():
-            if param.startswith("SIM_"):
-                if param in sim_parameters_missing_documentation:
-                    if param in htree:
-                        self.progress("%s is in both XML and whitelist; remove it from the whitelist" % param)
-                        fail = True
-                    # hopefully these get documented sometime....
-                    continue
             if param not in htree:
                 self.progress("%s not in XML" % param)
                 fail = True
         if fail:
             raise NotAchievedException("Downloaded parameters missing in XML")
-
-        self.progress("There are %u SIM_ parameters left to document" % len(sim_parameters_missing_documentation))
 
         # FIXME: this should be doable if we filter out e.g BRD_* and CAN_*?
 #        self.progress("Checking no extra parameters present in XML")
@@ -2833,14 +2717,18 @@ class TestSuite(abc.ABC):
                     continue
                 if state == state_outside:
                     if ("#define LOG_COMMON_STRUCTURES" in line or
-                            re.match("#define LOG_STRUCTURE_FROM_.*", line)):
+                            re.match("#define LOG_STRUCTURE_FROM_.*", line) or
+                            re.match("#define LOG_RTC_MESSAGE.*", line)):
                         if debug:
                             self.progress("Moving inside")
                         state = state_inside
                     continue
                 if state == state_inside:
                     if linestate == linestate_none:
-                        allowed_list = ['LOG_STRUCTURE_FROM_']
+                        allowed_list = [
+                            'LOG_STRUCTURE_FROM_',
+                            'LOG_RTC_MESSAGE',
+                        ]
 
                         allowed = False
                         for a in allowed_list:
@@ -3926,12 +3814,7 @@ class TestSuite(abc.ABC):
                 break
 
         # ensure we don't get any extras:
-        m = self.mav.recv_match(type='LOG_ENTRY',
-                                blocking=True,
-                                timeout=2)
-        if m is not None:
-            raise NotAchievedException("Received extra LOG_ENTRY?!")
-        # should be: m = self.assert_not_receive_message('LOG_ENTRY', timeout=2)
+        self.assert_not_receiving_message('LOG_ENTRY', timeout=2)
 
         return logs
 
@@ -4283,6 +4166,8 @@ class TestSuite(abc.ABC):
             m = self.mav.recv_match(type='SYSTEM_TIME', blocking=True, timeout=0.1)
             if m is None:
                 continue
+            if m.get_srcSystem() != self.sysid_thismav():
+                continue
 
             return m.time_boot_ms * 1.0e-3
 
@@ -4376,7 +4261,8 @@ class TestSuite(abc.ABC):
                 frame = mavutil.mavlink.MAV_FRAME_GLOBAL
             if opts.get('frame', None) is not None:
                 frame = opts.get('frame')
-            ret.append(self.create_MISSION_ITEM_INT(t, seq=seq, frame=frame, x=int(lat*1e7), y=int(lng*1e7), z=alt))
+            p1 = opts.get('p1', 0)  # should we pass `None` instead?
+            ret.append(self.create_MISSION_ITEM_INT(t, seq=seq, frame=frame, p1=p1, x=int(lat*1e7), y=int(lng*1e7), z=alt))
             seq += 1
 
         return ret
@@ -4395,6 +4281,33 @@ class TestSuite(abc.ABC):
             target_system=target_system,
             target_component=target_component)
         self.check_mission_upload_download(mission)
+
+    def start_flying_simple_relhome_mission(self, items):
+        '''uploads items, changes mode to auto, waits ready to arm and arms
+        vehicle.  If the first item it a takeoff you can expect the
+        vehicle to fly after this method returns.  On Copter AUTO_OPTIONS
+        should be 3.
+        '''
+
+        self.upload_simple_relhome_mission(items)
+        self.set_current_waypoint(0, check_afterwards=False)
+
+        self.change_mode('AUTO')
+        self.wait_ready_to_arm()
+
+        self.arm_vehicle()
+        # copter gets stuck in auto; if you run a mission to
+        # completion then the mission state machine ends up in a
+        # "done" state and you can't restart by just setting an
+        # earlier waypoint:
+        self.send_cmd(mavutil.mavlink.MAV_CMD_MISSION_START)
+
+    def fly_simple_relhome_mission(self, items):
+        '''uploads items, changes mode to auto, waits ready to arm and arms
+        vehicle.  Then waits for the vehicle to disarm.
+        '''
+        self.start_flying_simple_relhome_mission(items)
+        self.wait_disarmed()
 
     def get_mission_count(self):
         return self.get_parameter("MIS_TOTAL")
@@ -5761,7 +5674,7 @@ class TestSuite(abc.ABC):
 
         tstart = self.get_sim_time()
         while True:
-            if tstart - self.get_sim_time_cached() > timeout:
+            if self.get_sim_time_cached() - tstart > timeout:
                 raise NotAchievedException("Failed to set RC values")
             m = self.mav.recv_match(type='RC_CHANNELS', blocking=True, timeout=1)
             if m is None:
@@ -5912,6 +5825,29 @@ class TestSuite(abc.ABC):
             return os.path.join(testdir, self.current_test_name_directory + "test_arming.txt")
         else:
             return None
+
+    def test_takeoff_check_mode(self, mode, user_takeoff=False, force_disarm=False):
+        # stabilize check
+        self.progress("Motor takeoff check in %s" % mode)
+        self.change_mode(mode)
+        self.zero_throttle()
+        self.wait_ready_to_arm()
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+        self.arm_vehicle()
+        if user_takeoff:
+            self.run_cmd(
+                mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+                p7=10,
+            )
+        else:
+            self.set_rc(3, 1700)
+        # we may never see ourselves as armed in a heartbeat
+        self.wait_statustext("Takeoff blocked: ESC RPM out of range", check_context=True)
+        self.context_pop()
+        self.zero_throttle()
+        self.disarm_vehicle(force=force_disarm)
+        self.wait_disarmed()
 
     def set_safetyswitch_on(self, **kwargs):
         self.set_safetyswitch(1, **kwargs)
@@ -6092,8 +6028,8 @@ class TestSuite(abc.ABC):
             m = self.assert_receive_message(message_type, timeout=60)
             roll_deg = math.degrees(m.roll)
             pitch_deg = math.degrees(m.pitch)
-            self.progress("wait_att: roll=%f desroll=%s pitch=%f despitch=%s" %
-                          (roll_deg, desroll, pitch_deg, despitch))
+            self.progress("wait_att[%s]: roll=%f desroll=%s pitch=%f despitch=%s" %
+                          (message_type, roll_deg, desroll, pitch_deg, despitch))
             if desroll is not None and abs(roll_deg - desroll) > tolerance:
                 continue
             if despitch is not None and abs(pitch_deg - despitch) > tolerance:
@@ -6112,16 +6048,16 @@ class TestSuite(abc.ABC):
         tstart = self.get_sim_time()
         while True:
             if self.get_sim_time_cached() - tstart > timeout:
-                raise AutoTestTimeoutException("Failed to achieve attitude")
-            m = self.poll_message(message_type)
+                raise AutoTestTimeoutException("Failed to achieve (quaternion) attitude")
+            m = self.poll_message(message_type, quiet=True)
             q = quaternion.Quaternion([m.q1, m.q2, m.q3, m.q4])
             euler = q.euler
             roll = euler[0]
             pitch = euler[1]
             roll_deg = math.degrees(roll)
             pitch_deg = math.degrees(pitch)
-            self.progress("wait_att_quat: roll=%f desroll=%s pitch=%f despitch=%s" %
-                          (roll_deg, desroll, pitch_deg, despitch))
+            self.progress("wait_att_quat[%s]: roll=%f desroll=%s pitch=%f despitch=%s" %
+                          (message_type, roll_deg, desroll, pitch_deg, despitch))
             if desroll is not None and abs(roll_deg - desroll) > tolerance:
                 continue
             if despitch is not None and abs(pitch_deg - despitch) > tolerance:
@@ -6431,6 +6367,78 @@ class TestSuite(abc.ABC):
         if len(want) == 0:
             return
         raise ValueError("Failed to set parameters (%s)" % want)
+
+    def reorder_compass_appearance(self, device_ids):
+        """
+        Set compass appearance order by mapping device IDs to SIM_MAGx_DEVID parameters.
+
+        Args:
+            device_ids: List of device IDs in desired order
+
+        Example:
+            # Swap compass 2 and compass 4
+            original_ids = self.get_sim_mag_devids(6)
+            # Reorder: [dev1, dev4, dev3, dev2, dev5, dev6]
+            reordered = [original_ids[0], original_ids[3], original_ids[2],
+                        original_ids[1], original_ids[4], original_ids[5]]
+            self.reorder_compass_appearance(reordered)
+        """
+        # Build parameter dictionary
+        params = {}
+        for i, dev_id in enumerate(device_ids):
+            param_name = f"SIM_MAG{i + 1}_DEVID"
+            params[param_name] = dev_id
+
+        # Apply the parameters
+        self.set_parameters(params)
+
+    def check_mag_devids_detected(self, num_compasses):
+        """
+        Check if all SIM_MAGx_DEVID values are present in COMPASS_DEV_ID parameters.
+
+        Args:
+            num_compasses: Number of compasses to check
+
+        Raises:
+            NotAchievedException: If any SIM_MAG device ID is not found in COMPASS_DEV_ID slots
+        """
+        # Fetch SIM_MAGx_DEVID values
+        sim_device_ids = self.get_sim_mag_devids(num_compasses)
+
+        # Fetch COMPASS_DEV_ID values
+        compass_dev_ids = []
+        for i in range(1, num_compasses + 1):
+            suffix = "" if i == 1 else str(i)
+            dev_id = self.get_parameter(f"COMPASS_DEV_ID{suffix}")
+            self.progress(f"COMPASS_DEV_ID{suffix} = {dev_id}")
+            compass_dev_ids.append(dev_id)
+
+        # Check that each SIM_MAG device ID is present in COMPASS_DEV_ID
+        for sim_id in sim_device_ids:
+            if sim_id not in compass_dev_ids:
+                raise NotAchievedException(
+                    f"SIM_MAG device ID {sim_id} not found in COMPASS_DEV_ID slots. "
+                    f"SIM IDs: {sim_device_ids}, COMPASS IDs: {compass_dev_ids}"
+                )
+
+        self.progress(f"All {num_compasses} compass device IDs detected")
+
+    def get_sim_mag_devids(self, num_compasses):
+        """
+        Fetch list of device IDs from SIM_MAGx_DEVID parameters.
+
+        Args:
+            num_compasses: Number of compasses to fetch
+
+        Returns:
+            List of device IDs from SIM_MAG1_DEVID through SIM_MAGn_DEVID
+        """
+        device_ids = []
+        for i in range(1, num_compasses + 1):
+            dev_id = self.get_parameter(f"SIM_MAG{i}_DEVID")
+            device_ids.append(dev_id)
+            self.progress(f"SIM_MAG{i}_DEVID = {dev_id}")
+        return device_ids
 
     # FIXME: modify assert_parameter_value to take epsilon_pct instead:
     def assert_parameter_value_pct(self, name, expected_value, max_error_percent):
@@ -7153,7 +7161,7 @@ class TestSuite(abc.ABC):
         self.assert_capability(mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT)
         self.assert_capability(mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_COMPASS_CALIBRATION)
 
-    def get_mode_from_mode_mapping(self, mode):
+    def get_mode_from_mode_mapping(self, mode) -> int:
         """Validate and return the mode number from a string or int."""
         if isinstance(mode, int):
             return mode
@@ -8406,12 +8414,7 @@ class TestSuite(abc.ABC):
     def mode_is(self, mode, cached=False, drain_mav=True, drain_mav_quietly=True):
         if not cached:
             self.wait_heartbeat(drain_mav=drain_mav, quiet=drain_mav_quietly)
-        try:
-            return self.get_mode_from_mode_mapping(self.mav.flightmode) == self.get_mode_from_mode_mapping(mode)
-        except Exception:
-            pass
-        # assume this is a number....
-        return self.mav.messages['HEARTBEAT'].custom_mode == mode
+        return self.mav.messages['HEARTBEAT'].custom_mode == self.get_mode_from_mode_mapping(mode)
 
     def wait_mode(self, mode, timeout=60):
         """Wait for mode to change."""
@@ -8992,7 +8995,7 @@ Also, ignores heartbeats not from our target system'''
         '''removes the terrain files ArduPilot keeps in its onboiard storage'''
         util.run_cmd('rm -f %s' % util.reltopdir("terrain/*.DAT"))
 
-    def check_logs(self, name):
+    def check_logs(self, name, bin_logs=None):
         '''called to move relevant log files from our working directory to the
         buildlogs directory'''
         if not self.move_logs_on_test_failure:
@@ -9005,7 +9008,9 @@ Also, ignores heartbeats not from our target system'''
             print("Renaming %s to %s" % (log, newname))
             shutil.move(log, newname)
         # move binary log files
-        for log in sorted(self.bin_logs()):
+        if bin_logs is None:
+            bin_logs = self.bin_logs()
+        for log in sorted(bin_logs):
             bname = os.path.basename(log)
             newname = os.path.join(to_dir, "%s-%s-%s" % (self.log_name(), name, bname))
             print("Renaming %s to %s" % (log, newname))
@@ -9158,6 +9163,8 @@ Also, ignores heartbeats not from our target system'''
             self.print_exception_caught(e, send_statustext=False)
             passed = False
 
+        pre_reboot_bin_logs = self.bin_logs()
+
         # if we haven't already reset ArduPilot because it's dead,
         # then ensure the vehicle was disarmed at the end of the test.
         # If it wasn't then the test is considered failed:
@@ -9224,7 +9231,7 @@ Also, ignores heartbeats not from our target system'''
         else:
             if self.logs_dir is not None:
                 # stash the binary logs and corefiles away for later analysis
-                self.check_logs(name)
+                self.check_logs(name, bin_logs=pre_reboot_bin_logs)
 
         if passed:
             self.progress('PASSED: "%s"' % prettyname)
@@ -9997,7 +10004,7 @@ Also, ignores heartbeats not from our target system'''
                 self.set_parameter("COMPASS_ORIENT%d" % count, 0)
 
             # Only care about compass prearm
-            self.set_parameter("ARMING_CHECK", 4)
+            self.set_parameter("ARMING_SKIPCHK", ~(1 << 2))
 
         #################################################
         def do_test_mag_cal(mavproxy, params, compass_tnumber):
@@ -10388,6 +10395,92 @@ Also, ignores heartbeats not from our target system'''
 
         self.context_pop()
 
+    def SixCompassCalibrationAndReordering(self):
+        '''Test reordering of 6 simulated compasses by changing priority and appearance order'''
+        self.context_push()
+
+        total_compasses = 6
+
+        self.progress("Setting up 6 simulated I2C compasses with calibration")
+
+        # Fetch existing SIM_MAGx_DEVID values
+        device_ids = self.get_sim_mag_devids(total_compasses)
+
+        # disable force saving dev_ids for subsequent boots
+        self.set_parameter("SIM_MAG_SAVE_IDS", 0)
+
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        # Verify all 6 compasses are detected (stored in DEV_ID parameters)
+        self.progress("Verifying 6 compasses detected in DEV_ID slots")
+        self.check_mag_devids_detected(total_compasses)
+
+        # Reboot to apply changes
+        self.progress("Rebooting to apply reordering")
+        self.reboot_sitl()
+
+        def wait_correct_compass_prearm_message():
+            # Check for correct compass prearm messages
+            # We expect "PreArm: Compass not calibrated" but NOT
+            # "PreArm: Compass x not found" or any other compass prearm message
+            self.progress("Waiting for compass prearm message")
+            self.context_collect("STATUSTEXT")
+            msg = self.wait_statustext("PreArm: Compass", timeout=60, check_context=True)
+
+            # Check if we got the expected message or an unexpected one
+            if "not found" in msg.text.lower():
+                self.context_clear_collection("STATUSTEXT")
+                raise NotAchievedException(f"Unexpected compass not found: {msg.text}")
+            elif "not calibrated" in msg.text.lower():
+                self.progress(f"Got expected prearm failure: {msg.text}")
+            else:
+                self.context_clear_collection("STATUSTEXT")
+                raise NotAchievedException(f"Unexpected compass prearm message: {msg.text}")
+
+            self.context_clear_collection("STATUSTEXT")
+
+        # Change appearance order: swap positions 2 and 4
+        # Reorder: [dev1, dev4, dev3, dev2, dev5, dev6]
+        reordered = [device_ids[0], device_ids[3], device_ids[2],
+                     device_ids[1], device_ids[4], device_ids[5]]
+        self.reorder_compass_appearance(reordered)
+
+        # Set priority for compass 4
+        self.set_parameter("COMPASS_PRIO3_ID", device_ids[3])
+
+        self.reboot_sitl()
+        wait_correct_compass_prearm_message()
+
+        # Verify all 6 compasses are still present (in any DEV_ID slot)
+        self.progress("Verifying all 6 compasses still present after reordering")
+        self.check_mag_devids_detected(total_compasses)
+
+        self.reorder_compass_appearance(reordered)
+        self.progress("Setting priorities to use last three compasses")
+        self.set_parameters({
+            "COMPASS_PRIO1_ID": device_ids[3],
+            "COMPASS_PRIO2_ID": device_ids[4],
+            "COMPASS_PRIO3_ID": device_ids[5],
+        })
+        self.reboot_sitl()
+        wait_correct_compass_prearm_message()
+        self.check_mag_devids_detected(total_compasses)
+
+        # revert to original
+        self.progress("Reverting to original compass priorities")
+        self.reorder_compass_appearance(device_ids)
+        self.set_parameters({
+            "COMPASS_PRIO1_ID": device_ids[0],
+            "COMPASS_PRIO2_ID": device_ids[1],
+            "COMPASS_PRIO3_ID": device_ids[2],
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        self.progress("SixCompassCalibrationAndReordering completed successfully")
+        self.context_pop()
+
     # something about SITLCompassCalibration appears to fail
     # this one, so we put it first:
     def FixedYawCalibration(self):
@@ -10737,8 +10830,8 @@ Also, ignores heartbeats not from our target system'''
         '''Arm features'''
         # TEST ARMING/DISARM
         self.delay_sim_time(12)  # wait for gyros/accels to be happy
-        if self.get_parameter("ARMING_CHECK") != 1.0 and not self.is_sub():
-            raise ValueError("Arming check should be 1")
+        if self.get_parameter("ARMING_SKIPCHK") != 0 and not self.is_sub():
+            raise ValueError("Arming skipped checks should be 0")
         if not self.is_sub() and not self.is_tracker():
             self.set_parameter("ARMING_RUDDER", 2)  # allow arm and disarm with rudder on first tests
         if self.is_copter():
@@ -12720,7 +12813,7 @@ switch value'''
     def test_parameter_checks_poscontrol(self, param_prefix):
         self.wait_ready_to_arm()
         self.context_push()
-        self.set_parameter("%s_POSXY_P" % param_prefix, -1)
+        self.set_parameter("%s_NE_POS_P" % param_prefix, -1)
         self.run_cmd(
             mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
             p1=1,  # ARM
@@ -12764,6 +12857,7 @@ switch value'''
             self.set_parameters({
                 "AFS_ENABLE": 1,
                 "MAV_GCS_SYSID": self.mav.source_system,
+                "RTL_AUTOLAND": 2,
             })
             self.drain_mav()
             self.assert_capability(mavutil.mavlink.MAV_PROTOCOL_CAPABILITY_FLIGHT_TERMINATION)
@@ -12802,6 +12896,7 @@ switch value'''
                 self.do_fence_disable()
 
             self.start_subtest("GPS Failure")
+            self.wait_ready_to_arm()
             self.context_push()
             self.context_collect("STATUSTEXT")
             self.set_parameters({
@@ -13057,12 +13152,100 @@ switch value'''
             self.customise_SITL_commandline([
                 "--home", "%s,%s,%s,%s" % (HOME.lat, HOME.lng, HOME.alt, heading)
             ])
-            for ahrs_type in [0, 2, 3]:
+            for ahrs_type in [0, 2, 3, 11]:
                 self.start_subsubtest("Testing AHRS_TYPE=%u" % ahrs_type)
                 self.context_push()
-                self.set_parameter("AHRS_EKF_TYPE", ahrs_type)
-                self.reboot_sitl()
-                self.wait_prearm_sys_status_healthy()
+
+                # Special setup for ExternalAHRS (type 11)
+                if ahrs_type == 11:
+                    # Test all simulated ExternalAHRS backends
+                    external_ahrs_configs = [
+                        {
+                            "name": "VectorNav",
+                            "device": "VectorNav",
+                            "eahrs_type": 1,
+                        },
+                        {
+                            "name": "MicroStrain5",
+                            "device": "MicroStrain5",
+                            "eahrs_type": 2,
+                        },
+                        {
+                            "name": "InertialLabs",
+                            "device": "ILabs",
+                            "eahrs_type": 5,
+                        },
+                        {
+                            "name": "MicroStrain7",
+                            "device": "MicroStrain7",
+                            "eahrs_type": 7,
+                        },
+                    ]
+
+                    for config in external_ahrs_configs:
+                        self.start_subsubtest("Testing ExternalAHRS backend: %s" % config["name"])
+                        self.context_push()
+
+                        self.customise_SITL_commandline([
+                            "--serial4=sim:%s" % config["device"],
+                        ])
+                        self.set_parameters({
+                            "EAHRS_TYPE": config["eahrs_type"],
+                            "SERIAL4_PROTOCOL": 36,  # ExternalAHRS protocol
+                            "SERIAL4_BAUD": 230400,
+                            "GPS1_TYPE": 21,  # External AHRS
+                            "AHRS_EKF_TYPE": ahrs_type,
+                            "INS_GYR_CAL": 1,
+                            "EAHRS_SENSORS": 0xD,  # GPS|BARO|COMPASS (exclude IMU)
+                        })
+                        self.reboot_sitl()
+                        self.delay_sim_time(5)
+                        self.progress("Running accelcal")
+                        self.run_cmd(
+                            mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
+                            p5=4,
+                            timeout=5,
+                        )
+                        self.wait_prearm_sys_status_healthy(timeout=120)
+
+                        for (r, p) in [(0, 0), (9, 0), (2, -6), (10, 10)]:
+                            self.set_parameters({
+                                'AHRS_TRIM_X': math.radians(r),
+                                'AHRS_TRIM_Y': math.radians(p),
+                                "SIM_ACC_TRIM_X": math.radians(r),
+                                "SIM_ACC_TRIM_Y": math.radians(p),
+                            })
+                            self.reboot_sitl()
+                            self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_SIM_STATE, 10)
+                            att_desroll = 0
+                            att_despitch = 0
+                            if ahrs_type == 11:
+                                # this is very nasty compatibility
+                                # code for the fact our rotations are
+                                # incorrect for ExternalAHRS eulers
+                                # and rotation matrix!  It is here to
+                                # ensure behaviour is preserved until
+                                # we can fix the bug!  Search for
+                                # "note that this is suspect" to find
+                                # the problem code.
+                                att_desroll = -r
+                                att_despitch = -p
+                            self.wait_attitude(desroll=att_desroll, despitch=att_despitch, timeout=120, tolerance=1.5)
+                            if ahrs_type != 0:
+                                self.wait_attitude(desroll=0, despitch=0, message_type='AHRS2', tolerance=1, timeout=120)
+                            self.wait_attitude_quaternion(desroll=0, despitch=0, tolerance=1, timeout=120)
+                            self.wait_attitude(desroll=0, despitch=0, message_type='SIM_STATE', tolerance=1, timeout=120)
+
+                        self.context_pop()
+                        self.reboot_sitl()
+
+                    # Skip the normal test loop for ahrs_type 11 since we already tested it above
+                    self.context_pop()
+                    continue
+                else:
+                    self.set_parameter("AHRS_EKF_TYPE", ahrs_type)
+                    self.reboot_sitl()
+                self.wait_prearm_sys_status_healthy(timeout=120)
                 for (r, p) in [(0, 0), (9, 0), (2, -6), (10, 10)]:
                     self.set_parameters({
                         'AHRS_TRIM_X': math.radians(r),
@@ -13070,10 +13253,14 @@ switch value'''
                         "SIM_ACC_TRIM_X": math.radians(r),
                         "SIM_ACC_TRIM_Y": math.radians(p),
                     })
+                    self.reboot_sitl()
+                    self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_SIM_STATE, 10)
                     self.wait_attitude(desroll=0, despitch=0, timeout=120, tolerance=1.5)
+                    self.wait_attitude(desroll=0, despitch=0, timeout=120, tolerance=1.5, message_type='SIM_STATE')
                     if ahrs_type != 0:  # we don't get secondary msgs while DCM is primary
                         self.wait_attitude(desroll=0, despitch=0, message_type='AHRS2', tolerance=1, timeout=120)
                     self.wait_attitude_quaternion(desroll=0, despitch=0, tolerance=1, timeout=120)
+                    self.wait_attitude_quaternion(desroll=0, despitch=0, tolerance=1, timeout=120, message_type='SIM_STATE')
 
                 self.context_pop()
                 self.reboot_sitl()
@@ -14901,6 +15088,58 @@ SERIAL5_BAUD 128
             self.create_junit_report(step_name, results, skip_list)
 
         return len(self.fail_list) == 0
+
+    def wait_circling_point_with_radius(self, loc, want_radius, epsilon=5.0, min_circle_time=5, timeout=120, track_angle=True):
+        on_radius_start_heading = None
+        average_radius = 0.0
+        done_time = False
+        done_angle = False
+        tstart = self.get_sim_time()
+        circle_time_start = tstart
+        while True:
+            now = self.get_sim_time()
+            if now - tstart > timeout:
+                raise AutoTestTimeoutException("Did not get onto circle")
+            here = self.mav.location()
+            got_radius = self.get_distance(loc, here)
+            average_radius = 0.95*average_radius + 0.05*got_radius
+            on_radius = abs(got_radius - want_radius) < epsilon
+            m = self.assert_receive_message('VFR_HUD')
+            heading = m.heading
+            on_string = "off"
+            got_angle = ""
+            if on_radius_start_heading is not None:
+                got_angle = "%0.2f" % abs(on_radius_start_heading - heading) # FIXME
+                on_string = "on"
+
+            want_angle = 180 # we don't actually get this (angle-substraction issue.  But we get enough...
+            got_circle_time = self.get_sim_time() - circle_time_start
+            bits = [
+                f"wait-circling: got-r={got_radius:.2f} want-r={want_radius}",
+                f"avg-r={average_radius} {on_string}",
+                f"t={got_circle_time:0.2f}/{min_circle_time}",
+            ]
+            if track_angle:
+                bits.append(f"want-a={want_angle:0.1f} got-a={got_angle}")
+
+            self.progress(" ".join(bits))
+            if on_radius:
+                if on_radius_start_heading is None:
+                    on_radius_start_heading = heading
+                    average_radius = got_radius
+                    circle_time_start = now
+                    continue
+                if abs(on_radius_start_heading - heading) > want_angle: # FIXME
+                    done_angle = True
+                if got_circle_time > min_circle_time:
+                    done_time = True
+                if not track_angle:
+                    done_angle = True
+                if done_time and done_angle:
+                    return
+                continue
+            on_radius_start_heading = None
+            circle_time_start = now
 
     def create_junit_report(self, test_name: str, results: List[Result], skip_list: List[Tuple[Test, Dict[str, str]]]) -> None:
         """Generate Junit report from the autotest results"""

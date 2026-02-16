@@ -161,9 +161,10 @@ public:
     // get air density / sea level density - decreases as altitude climbs
     float get_air_density_ratio(void) const;
     
-    // return an (equivalent) airspeed estimate if available. return true
-    // if we have an estimate
-    bool airspeed_estimate(float &airspeed_ret) const;
+    // return an (equivalent) airspeed estimate if available. return
+    // true if airspeed_ret is valid.  This value may be derived from
+    // airspeed data or synthesised from other sources.
+    bool airspeed_EAS(float &airspeed_ret) const;
 
     enum AirspeedEstimateType : uint8_t {
         NO_NEW_ESTIMATE = 0,
@@ -173,24 +174,28 @@ public:
         SIM = 4,
     };
 
-    // return an airspeed estimate if available. return true
-    // if we have an estimate
-    bool airspeed_estimate(float &airspeed_ret, AirspeedEstimateType &type) const;
+    // return an (equivalent) airspeed estimate if available. return
+    // true if airspeed_ret is valid. This value may be derived from
+    // airspeed data or synthesised from other sources (the type
+    // return parameter allows you to distinguish).
+    bool airspeed_EAS(float &airspeed_ret, AirspeedEstimateType &type) const;
 
     // return true if the current AHRS airspeed estimate (from airspeed_estimate method) is directly derived from an airspeed sensor
     bool using_airspeed_sensor() const;
 
-    // return a true airspeed estimate (navigation airspeed) if
-    // available. return true if we have an estimate
-    bool airspeed_estimate_true(float &airspeed_ret) const;
+    // return a true airspeed (navigation airspeed) if
+    // available. return true if airspeed_ret is valid.  This value
+    // may be derived from actual airspeed sensor data or synthesized
+    // from other sources.
+    bool airspeed_TAS(float &airspeed_ret) const;
 
     // return estimate of true airspeed vector in body frame in m/s
     // returns false if estimate is unavailable
-    bool airspeed_vector_true(Vector3f &vec) const;
+    bool airspeed_vector_TAS(Vector3f &vec) const;
 
-    // return the innovation in m/s, innovation variance in (m/s)^2 and age in msec of the last TAS measurement processed
+    // return the innovation in m/s, innovation variance in (m/s)^2 and age in msec of the last TAS measurement processed for a given sensor instance
     // returns false if the data is unavailable
-    bool airspeed_health_data(float &innovation, float &innovationVariance, uint32_t &age_ms) const;
+    bool airspeed_health_data(uint8_t instance, float &innovation, float &innovationVariance, uint32_t &age_ms) const;
 
     // return true if a airspeed sensor is enabled
     bool airspeed_sensor_enabled(void) const {
@@ -203,12 +208,6 @@ public:
         // FIXME: make this a method on the active backend
         return AP_AHRS_Backend::airspeed_sensor_enabled(airspeed_index);
     }
-
-    // return a synthetic (equivalent) airspeed estimate (one derived from sensors
-    // other than an actual airspeed sensor), if available. return
-    // true if we have a synthetic airspeed.  ret will not be modified
-    // on failure.
-    bool synthetic_airspeed(float &ret) const WARN_IF_UNUSED;
 
     // true if compass is being used
     bool use_compass();
@@ -255,10 +254,14 @@ public:
     // from which to decide the origin on its own
     bool set_origin(const Location &loc) WARN_IF_UNUSED;
 
+    // Set the origin to the last recorded location if option bit set and not using GPS
+    // This is useful for position controlled modes without GPS
+    void use_recorded_origin_maybe();
+
 #if AP_AHRS_POSITION_RESET_ENABLED
     // Set the EKF's NE horizontal position states and their corresponding variances from the supplied WGS-84 location
     // and 1-sigma horizontal position uncertainty. This can be used when the EKF is dead reckoning to periodically
-    // correct the position. If the EKF is is still using data from a postion sensor such as GPS, the position set
+    // correct the position. If the EKF is is still using data from a position sensor such as GPS, the position set
     // will not be performed.
     // pos_accuracy is the standard deviation of the horizontal position uncertainty in metres.
     // The altitude element of the location is not used.
@@ -374,9 +377,7 @@ public:
     // Resets the baro so that it reads zero at the current height
     // Resets the EKF height to zero
     // Adjusts the EKf origin height so that the EKF height + origin height is the same as before
-    // Returns true if the height datum reset has been performed
-    // If using a range finder for height no reset is performed and it returns false
-    bool resetHeightDatum();
+    void resetHeightDatum();
 
     // send a EKF_STATUS_REPORT for current EKF
     void send_ekf_status_report(class GCS_MAVLINK &link) const;
@@ -449,13 +450,12 @@ public:
     // check if external nav is providing yaw
     bool using_extnav_for_yaw(void) const;
 
+    // check if GPS is being used to estimate position or velocity
+    // always returns true for External and SIM EKF types
+    bool using_gps(void) const;
+
     // set and save the ALT_M_NSE parameter value
     void set_alt_measurement_noise(float noise);
-
-    // get the selected ekf type, for allocation decisions
-    int8_t get_ekf_type(void) const {
-        return _ekf_type;
-    }
 
     enum class EKFType : uint8_t {
 #if AP_AHRS_DCM_ENABLED
@@ -474,6 +474,10 @@ public:
         EXTERNAL = 11,
 #endif
     };
+
+    // returns a canonicalised and valid EKFType, as opposed to the raw
+    // parameter value which may be any value the user has set
+    EKFType configured_ekf_type(void) const;
 
     // set the selected ekf type, for RC aux control
     void set_ekf_type(EKFType ahrs_type) {
@@ -637,7 +641,7 @@ public:
     // in result, x is forward, y is right
     Vector2f earth_to_body2D(const Vector2f &ef_vector) const;
 
-    // rotate a 2D vector from earth frame to body frame
+    // rotate a 2D vector from body frame to earth frame
     // in input, x is forward, y is right
     Vector2f body_to_earth2D(const Vector2f &bf) const WARN_IF_UNUSED;
     Vector2p body_to_earth2D_p(const Vector2p &bf) const WARN_IF_UNUSED;
@@ -759,6 +763,9 @@ private:
 
     AP_Enum<GPSUse> _gps_use;
     AP_Int8 _gps_minsats;
+    AP_Float _origin_lat;
+    AP_Float _origin_lon;
+    AP_Float _origin_alt;
 
     EKFType active_EKF_type(void) const { return state.active_EKF; }
 
@@ -807,7 +814,6 @@ private:
     uint32_t start_time_ms;
     uint8_t _ekf_flags; // bitmask from Flags enumeration
 
-    EKFType ekf_type(void) const;
     void update_DCM();
 
     /*
@@ -934,6 +940,10 @@ private:
     // return the quaternion defining the rotation from NED to XYZ (body) axes
     bool _get_quaternion(Quaternion &quat) const WARN_IF_UNUSED;
 
+    // return the quaternion defining the rotation from NED to XYZ
+    // (body) axes for the passed-in type
+    bool _get_quaternion_for_ekf_type(Quaternion &quat, EKFType type) const;
+
     // return secondary position solution if available
     bool _get_secondary_position(Location &loc) const;
 
@@ -983,6 +993,10 @@ private:
     // primary is not good enough.
     EKFType fallback_active_EKF_type(void) const;
 
+    // Record the current valid origin to parameters
+    // This may save the user from having to set the origin manually when using position controlled modes without GPS
+    void record_origin();
+
     /*
       state updated at the end of each update() call
      */
@@ -1000,13 +1014,13 @@ private:
         Vector3f wind_estimate;
         bool wind_estimate_ok;
         float EAS2TAS;
-        bool airspeed_ok;
-        float airspeed;
+        bool airspeed_EAS_ok;
+        float airspeed_EAS;
         AirspeedEstimateType airspeed_estimate_type;
-        bool airspeed_true_ok;
-        float airspeed_true;
-        Vector3f airspeed_vec;
-        bool airspeed_vec_ok;
+        bool airspeed_TAS_ok;
+        float airspeed_TAS;
+        Vector3f airspeed_TAS_vec;
+        bool airspeed_TAS_vec_ok;
         Quaternion quat;
         bool quat_ok;
         Vector3f secondary_attitude;
@@ -1052,6 +1066,8 @@ private:
         DISABLE_DCM_FALLBACK_FW=(1U<<0),
         DISABLE_DCM_FALLBACK_VTOL=(1U<<1),
         DISABLE_AIRSPEED_EKF_CHECK=(1U<<2),
+        RECORD_ORIGIN=(1U<<3),
+        USE_RECORDED_ORIGIN_FOR_NONGPS=(1U<<4),
     };
     AP_Int16 _options;
     

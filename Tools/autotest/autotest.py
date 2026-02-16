@@ -393,12 +393,14 @@ def run_specific_test(step, *args, **kwargs):
     for a in tester.tests():
         if not isinstance(a, Test):
             a = Test(a)
-        print("Got %s" % (a.name))
+        # print("Got %s" % (a.name))
         if a.name in tests:
             run.append(a)
+            tests.remove(a.name)
+    if len(tests):
+        print(f"Failed to find tests {tests}")
+        sys.exit(1)
     return tester.autotest(tests=run, allow_skips=False, step_name=step), tester
-    print("Failed to find test %s on %s" % (test, testname))
-    sys.exit(1)
 
 
 def run_step(step):
@@ -1071,13 +1073,6 @@ if __name__ == "__main__":
     # default to moving logs when running in autotest-server mode:
     if opts.move_logs_on_test_failure is None:
         opts.move_logs_on_test_failure = opts.autotest_server
-
-        # temporarily default it to the old behaviour, but allow a
-        # user to test it by setting an environment variable:
-        if os.getenv("AP_AUTOTEST_MOVE_LOGS_ON_FAILURE") is not None:
-            opts.move_logs_on_test_failure = os.getenv("AP_AUTOTEST_MOVE_LOGS_ON_FAILURE") == "1"
-        else:
-            opts.move_logs_on_test_failure = True
 
     steps = [
         'prerequisites',

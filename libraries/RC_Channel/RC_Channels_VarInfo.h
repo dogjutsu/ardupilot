@@ -110,7 +110,7 @@ const AP_Param::GroupInfo RC_Channels::var_info[] = {
     // @User: Standard
     // @Range: 0.1 10.0
     // @Units: s
-    AP_GROUPINFO_FRAME("_FS_TIMEOUT", 35, RC_CHANNELS_SUBCLASS, _fs_timeout, 1.0, AP_PARAM_FRAME_COPTER),
+    AP_GROUPINFO("_FS_TIMEOUT", 35, RC_CHANNELS_SUBCLASS, _fs_timeout, 1.0),
 
     AP_GROUPEND
 };
