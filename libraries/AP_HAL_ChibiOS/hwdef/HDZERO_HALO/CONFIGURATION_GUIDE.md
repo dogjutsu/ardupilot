@@ -410,26 +410,14 @@ return update()
 
 ### Performance Monitoring
 
-Add to any script:
-```lua
-gcs:send_text(6, string.format("Lua mem: %.1f KB", collectgarbage("count")))
-gcs:send_text(6, string.format("Free RAM: %d KB", hal.mem_free() / 1024))
-```
-
-#### Quick Profiler Script
-
-Use the bundled `scripts/mem_prof.lua` to periodically report heap, free RAM and per-cycle CPU time via STATUSTEXT. Upload to `@FLASH/scripts/` and watch the Messages tab:
-
-```
-LuaProf #12 heap=96.3KB free=312.0KB cpu=320us
-```
+> **Note:** `collectgarbage()` and `hal.mem_free()` are not available in
+> ArduPilot's Lua sandbox. Use `micros()` for per-cycle CPU timing.
 
 ### Best Practices
 
 1. **Keep scripts simple:** Offload high-rate math to C++ modules
 2. **Target 20-50Hz:** Balance responsiveness vs CPU load
 3. **Test in SITL first:** `sim_vehicle.py -v Rover --add-param-file=...`
-4. **Profile memory:** Watch heap usage via GCS messages
 5. **Error handling:** Wrap risky operations in `pcall()`
 6. **Modular design:** Split complex logic into multiple scripts
 
