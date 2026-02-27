@@ -55,13 +55,6 @@ define AP_BOOTLOADER_FLASHING_ENABLED 0
 # HSE value mirrors OSCILLATOR_HZ
 HSE_VALUE 8000000
 
-# Processor features - keep D-cache disabled by default as many H7 hwdefs do
-STM32_H7_DISABLE_DCACHE
-
-# Justification: Disabling D-cache is a conservative default used in several H7
-# board hwdefs. It avoids subtle caching coherence issues with DMA and peripherals
-# until board bring-up verifies cache-safe operation. Re-enable only after testing.
-# [TODO: REVIEW] Re-evaluate if HAL and peripheral DMA usage on Halo allow DCACHE.
 
 # USB CDC Port - vendor/product copied from earlier HDZero attempt; update if vendor differs
 USB_VENDOR 0x1209
@@ -264,13 +257,14 @@ SPIDEV imu2_icm42688 SPI1 DEVID1 GYRO1_CS MODE3 1*MHZ 16*MHZ
 IMU Invensensev3 SPI:imu1_icm42688 ROTATION_PITCH_180_YAW_90
 IMU Invensensev3 SPI:imu2_icm42688 ROTATION_PITCH_180_YAW_90
 
-# Justification: DRDY pins chosen from Betaflight mapping and/or schematic hints.
+# Note: Betaflight defines GYRO EXTI/DRDY pins (PC13, PA15) but the ArduPilot
+# Invensensev3 driver uses timer-based FIFO polling, so DRDY pins are not needed.
 # Rotation values follow physical mounting orientation used in Betaflight for Halo.
 # [TODO: REVIEW] Verify the orientation matrix against an actual board photo/schematic.
 
 ## DMA preferences - copied from TMotor baseline and adjusted for H7
-DMA_NOSHARE TIM1_UP TIM3_UP TIM4_UP SPI1* SPI4*
-DMA_PRIORITY TIM1_UP TIM3_UP TIM4_UP SPI1* SPI4*
+DMA_NOSHARE TIM1_UP TIM3_UP TIM4_UP SPI1*
+DMA_PRIORITY TIM1_UP TIM3_UP TIM4_UP SPI1*
 
 # Allow auto DMA resolver to pick streams; don't force ADC1 stream here.
 
@@ -315,11 +309,3 @@ define AP_BARO_PROBE_EXT_PARAMETER_ENABLED 0
 # EXT_FLASH_SIZE_MB and related XIP mappings because the external JEDEC NOR
 # sits on SPI2 (not QSPI/OSPI). It is accessed via SPIDEV/DATAFLASH and
 # LittleFS as a block device, not memory-mapped code space.
-
-## Include common H7 definitions
-include ../common/STM32H7.dat
-
-# Justification: Include shared common H7 defaults (clocking, NVIC tweaks, etc.).
-# This file centralizes values used across many H7 hwdefs to reduce duplication.
-# [TODO: REVIEW] Confirm this include exists in the common folder; if missing,
-# re-create a minimal common/STM32H7.dat with MCU macro defaults.
