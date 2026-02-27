@@ -1,0 +1,16 @@
+# HDZERO_HALO defaults.parm
+# ExpressLRS (CRSF) on SERIAL1 (USART1 PB6/PB7) with RC input.
+# Use RC_OPTIONS bits 9 (suppress CRSF mode/rate message) and 13 (ELRS 420k baud).
+# Bit positions: 9 => 512, 13 => 8192, combined => 8704.
+# We start SERIAL1_BAUD at 115 (115200). ELRS will negotiate and RC_OPTIONS bit 13
+# allows the 420k transition automatically without user intervention.
+# Provide robust defaults for RSSI/LQ reporting and flight mode channel mapping.
+
+SERIAL1_PROTOCOL 23
+SERIAL1_BAUD 115
+RSSI_TYPE 3
+RC_OPTIONS 8704
+FLTMODE_CH 12
+
+# Barometer fully disabled in hwdef (AP_BARO_ENABLED 0) so no BARO_* params here.
+# Users can override any of these via Mission Planner as usual.
